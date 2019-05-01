@@ -1,0 +1,5 @@
+[package]
+name = "aline"
+version = "0.1.0"
+authors = ["Brandon Holt <b.holt@apple.com>"]
+edition = "2018"
