@@ -35,17 +35,38 @@ impl Config {
     }
 }
 
-pub fn process_reader<R: BufRead>(
-    config: &Config,
-    r: R,
-) -> impl Iterator<Item = Option<String>> + '_ {
-    return r.lines().map(move |rl| {
-        let l = rl.unwrap();
-        println!(">>> {}", &l);
-        if let Some(f) = config.field {
-            let mut parts = l.split(&config.delimiter);
-            return parts.nth(f).map(String::from);
-        }
-        return Some(l);
-    });
+//pub fn process_reader<'a>(
+//    config: &'a Config,
+//    r: &'a mut impl BufRead,
+//) -> impl Iterator<Item = Option<String>> + 'a {
+//    return r.lines().map(move |rl| {
+//        let l = rl.unwrap();
+//        println!(">>> {}", &l);
+//        if let Some(f) = config.field {
+//            let mut parts = l.split(&config.delimiter);
+//            return parts.nth(f).map(String::from);
+//        }
+//        return Some(l);
+//    });
+//}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::File;
+    use std::io::{BufRead, BufReader};
+
+    #[test]
+    fn scratch() {
+        //        let f = File::open("Cargo.toml").unwrap();
+        //        let fbuf = BufReader::new(f);
+        //        let lines = fbuf.lines();
+        let xs = vec![1, 7, 8, 2, 6, 3, 4];
+        println!("{:?}", xs);
+        let ys = xs
+            .iter()
+            .flat_map(|x| if x > &5 { None } else { Some(x) })
+            .collect::<Vec<&i32>>();
+        println!("{:?}", ys);
+        assert!(false);
+    }
 }
