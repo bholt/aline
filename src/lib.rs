@@ -23,6 +23,10 @@ pub struct Config {
 
     #[structopt(parse(from_os_str))]
     pub inputs: Vec<PathBuf>,
+
+    #[structopt(short = "p", long = "print-filenames")]
+    /// Print each filename prefixed with '#' before its results
+    pub print_filename: bool,
 }
 
 impl Config {
