@@ -2,6 +2,7 @@ use aline::Config;
 use regex::Regex;
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Error};
+use std::process::exit;
 use structopt::StructOpt;
 
 fn process_lines(config: &Config, reader: impl BufRead) -> Result<(), Error> {
@@ -43,7 +44,10 @@ fn main() {
     if config.inputs.len() == 0 {
         let r = stdin();
         let rl = r.lock();
-        process_lines(&config, rl);
+        process_lines(&config, rl).unwrap_or_else(|e| {
+            eprintln!("error processing stdin: {:?}", e);
+            exit(1)
+        });
     }
 
     for fname in &config.inputs {
@@ -53,7 +57,13 @@ fn main() {
         let f = File::open(fname).unwrap();
         let fbuf = BufReader::new(f);
         // process_lines(&config, fbuf);
-        let lines_cleaned = fbuf.lines().map(|r| r.unwrap_or_default());
+        let lines_cleaned = fbuf.lines().flat_map(|r| match r {
+            Ok(l) => Some(l),
+            Err(e) => {
+                eprintln!("error reading line: {:?}", e);
+                None
+            }
+        });
         let fields = extract_field(&config, lines_cleaned);
         for f in fields {
             println!("{}", f);
