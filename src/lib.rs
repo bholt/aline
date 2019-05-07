@@ -1,6 +1,5 @@
 use regex::Regex;
 use std::collections::HashMap;
-use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
 use structopt::StructOpt;
@@ -105,13 +104,6 @@ pub enum OutputFormat {
 }
 
 impl ParsedLine {
-    fn new(fields: &[&str]) -> Self {
-        ParsedLine {
-            fields: fields.iter().map(|s| String::from(*s)).collect(),
-            keys: HashMap::new(),
-        }
-    }
-
     fn field(&self, f: &FieldSelector) -> Option<String> {
         match f {
             FieldSelector::Index(i) => {
@@ -168,6 +160,14 @@ mod tests {
         Config::from_iter_safe([&["aline"], args].concat()).expect("invalid config flags")
     }
 
+    /// Helper to create parsed line for testing
+    fn pline(fields: &[&str]) -> ParsedLine {
+        ParsedLine {
+            fields: fields.iter().map(|s| String::from(*s)).collect(),
+            keys: HashMap::new(),
+        }
+    }
+
     #[test]
     fn test_cfg_helper() {
         assert_eq!(
@@ -177,14 +177,6 @@ mod tests {
             },
             cfg(&["-d,"]),
         )
-    }
-
-    /// Helper to create parsed line for testing
-    fn pline(fields: &[&str]) -> ParsedLine {
-        ParsedLine {
-            fields: fields.iter().map(|s| String::from(*s)).collect(),
-            keys: HashMap::new(),
-        }
     }
 
     #[test]
