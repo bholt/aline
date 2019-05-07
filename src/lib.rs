@@ -2,7 +2,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
-use structopt::StructOpt;
+use structopt::{StructOpt, clap};
 
 mod re;
 
@@ -19,13 +19,13 @@ pub struct Config {
     // Inputs passed as arguments
     pub inputs: Vec<PathBuf>,
 
-    #[structopt(short = "d", long = "delimiter", default_value = "\\s+")]
+    #[structopt(short = "d", long = "delimiter")]
     /// Delimiter to use for parsing fields, cannot be set along with --input.
-    pub delimiter: String,
+    pub delimiter: Option<String>,
 
     #[structopt(short = "i", long = "input")]
     /// Input format (csv, json), cannot be set along with --delimiter.
-    pub input_format: Option<String>,
+    pub input_format: Option<InputFormat>,
 
     #[structopt(short = "f", long = "field")]
     // Field(s) to print, specified by number or name (depending on the input format).
@@ -44,28 +44,53 @@ pub struct Config {
 }
 
 impl Config {
-    fn default() -> Config {
-        Config {
-            inputs: vec![],
-            delimiter: "".to_string(),
-            input_format: None,
-            field: None,
-            fields: vec![],
-            verbose: false,
-            print_filename: false,
+    fn parser(&self) -> impl Fn(&str) -> ParsedLine {
+        if let Some(fmt) = &self.input_format {
+            match fmt {
+                "" =>
+            }
+        } else {
+            self.parser_delim()
         }
     }
 
-    fn parser(&self) -> impl Fn(&str) -> ParsedLine {
-        let delim = Regex::new(&self.delimiter).unwrap();
-        // if Some(input) = &self.input_format {
-        return move |l: &str| {
-            let parts = delim.split(&l).map(String::from).collect::<Vec<String>>();
+    fn parser_delim(&self) -> impl Fn(&str) -> ParsedLine {
+        let delim = if let Some(d) = &self.delimiter {
+            Regex::new(d).unwrap()
+        } else {
+            Regex::new(r"\s+").unwrap()
+        };
+        let whitespace = self.delimiter.is_none();
+
+        return move |line: &str| {
+            // if this is splitting by whitespace then skip the first "field"
+            let ltrim = if whitespace { line.trim() } else { line };
+            println!("@> {:?}", ltrim);
+            let parts = delim
+                .split(&ltrim)
+                .map(String::from)
+                .collect::<Vec<String>>();
             ParsedLine {
                 fields: parts,
                 keys: HashMap::new(),
             }
         };
+    }
+}
+
+/// How to parse the input
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum InputFormat {
+    JSON,
+    CSV,
+    Custom(String),
+}
+
+impl FromStr for InputFormat {
+    type Err = clap::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        unimplemented!()
     }
 }
 
@@ -172,7 +197,7 @@ mod tests {
     fn test_cfg_helper() {
         assert_eq!(
             Config {
-                delimiter: ",".to_string(),
+                delimiter: Some(",".to_string()),
                 ..Config::default()
             },
             cfg(&["-d,"]),
@@ -182,21 +207,52 @@ mod tests {
     #[test]
     fn parsed_line_output() {
         for (ps, fmt, fs, out) in &[
-            (&["a", "b"], Space, vec![Index(0)], "a"),
-            (&["a", "b"], Space, vec![Index(1)], "b"),
-            (&["a", "b"], Space, vec![Index(0), Index(1)], "a b"),
-            (&["a", "b"], CSV, vec![Index(1)], "b"),
-            (&["a", "b"], CSV, vec![Index(0), Index(1)], "a,b"),
-            (&["a", "b,c"], CSV, vec![Index(0), Index(1)], "a,\"b,c\""),
+            (pline(&["a", "b"]), Space, vec![Index(0)], "a"),
+            (pline(&["a", "b"]), Space, vec![Index(1)], "b"),
+            (pline(&["a", "b"]), Space, vec![Index(0), Index(1)], "a b"),
+            (pline(&["a", "b"]), CSV, vec![Index(1)], "b"),
+            (pline(&["a", "b"]), CSV, vec![Index(0), Index(1)], "a,b"),
+            (
+                pline(&["a", "b,c"]),
+                CSV,
+                vec![Index(0), Index(1)],
+                "a,\"b,c\"",
+            ),
+            (
+                pline(&["a", "b", "c"]),
+                CSV,
+                vec![Index(0), Index(1), Index(2)],
+                "a,b,c",
+            ),
         ] {
-            assert_eq!(*out, pline(*ps).output(fmt.clone(), fs.to_vec()));
+            assert_eq!(
+                *out,
+                ps.output(fmt.clone(), fs.to_vec()),
+                "\n### TEST CASE: ps={:?} fmt={:?} fs={:?} ###\n",
+                *ps,
+                fmt,
+                fs
+            );
         }
     }
 
     #[test]
     fn parser() {
-        let p = cfg(&["-d,"]).parser();
-        assert_eq!(p("a,b"), pline(&["a", "b"]));
+        for (line, config, expect) in &[
+            ("a b", cfg(&[]), pline(&["a", "b"])),
+            ("a  b", cfg(&[]), pline(&["a", "b"])),
+            (" a  b  ", cfg(&[]), pline(&["a", "b"])), // skip leading whitespace
+            ("a,b", cfg(&["-d,"]), pline(&["a", "b"])),
+            ("a,,b", cfg(&["-d,"]), pline(&["a", "", "b"])), // include empty comma fields
+        ] {
+            assert_eq!(
+                config.parser()(line),
+                *expect,
+                "\n### TEST CASE: line={:?} config={:?} ###\n",
+                *line,
+                config
+            );
+        }
     }
 
     #[test]

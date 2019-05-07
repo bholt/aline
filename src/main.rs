@@ -23,7 +23,11 @@ fn extract_field(
     config: &Config,
     lines: impl Iterator<Item = String>,
 ) -> impl Iterator<Item = String> {
-    let delim = Regex::new(&config.delimiter).unwrap();
+    let delim = if let Some(d) = &config.delimiter {
+        Regex::new(d).unwrap()
+    } else {
+        Regex::new(r"\s+").unwrap()
+    };
     let field = config.field.clone();
     return lines.flat_map(move |line| {
         if let Some(n) = field {
