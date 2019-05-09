@@ -44,7 +44,7 @@ pub struct Config {
 }
 
 impl Config {
-    fn parser(&self) -> impl Fn(&str) -> ParsedLine {
+    pub fn parser(&self) -> impl Fn(&str) -> ParsedLine {
         match &self.input_format {
             Some(_) => unimplemented!(),
             None => self.parser_delim(),
@@ -62,7 +62,6 @@ impl Config {
         return move |line: &str| {
             // if this is splitting by whitespace then skip the first "field"
             let ltrim = if whitespace { line.trim() } else { line };
-            println!("@> {:?}", ltrim);
             let parts = delim
                 .split(&ltrim)
                 .map(String::from)
@@ -156,7 +155,7 @@ impl ParsedLine {
         }
     }
 
-    fn output(&self, format: &Option<OutputFormat>, sel: &Vec<FieldSelector>) -> String {
+    pub fn output(&self, format: &Option<OutputFormat>, sel: &Vec<FieldSelector>) -> String {
         let fmt = format.clone().unwrap_or(OutputFormat::Space);
         match fmt {
             OutputFormat::Space => sel
@@ -273,10 +272,8 @@ mod tests {
     #[test]
     fn end_to_end() {
         let c = cfg(&["-d,", "-f1"]);
-        println!("@> {:#?}", c);
         let p = c.parser();
         let pl = p("a,b,c");
-        println!("@> {:#?}", pl);
         let out = pl.output(&c.output, &c.fields);
         assert_eq!("b", out);
     }
