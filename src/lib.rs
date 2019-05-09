@@ -2,7 +2,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
-use structopt::{StructOpt, clap};
+use structopt::{clap, StructOpt};
 
 mod re;
 
@@ -28,12 +28,12 @@ pub struct Config {
     pub input_format: Option<InputFormat>,
 
     #[structopt(short = "f", long = "field")]
-    // Field(s) to print, specified by number or name (depending on the input format).
-    pub field: Option<usize>,
-
-    #[structopt(short = "k", long = "keys")]
-    // Field(s) to print, specified by number or name (depending on the input format).
+    /// Field(s) to print, specified by number or name (depending on the input format).
     pub fields: Vec<FieldSelector>,
+
+    #[structopt(short = "o", long = "output")]
+    // Output format
+    pub output: Option<OutputFormat>,
 
     #[structopt(short = "v", long = "verbose")]
     pub verbose: bool,
@@ -45,12 +45,9 @@ pub struct Config {
 
 impl Config {
     fn parser(&self) -> impl Fn(&str) -> ParsedLine {
-        if let Some(fmt) = &self.input_format {
-            match fmt {
-                "" =>
-            }
-        } else {
-            self.parser_delim()
+        match &self.input_format {
+            Some(_) => unimplemented!(),
+            None => self.parser_delim(),
         }
     }
 
@@ -90,7 +87,11 @@ impl FromStr for InputFormat {
     type Err = clap::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        unimplemented!()
+        match s.to_ascii_lowercase().as_ref() {
+            "json" => Ok(InputFormat::JSON),
+            "csv" => Ok(InputFormat::CSV),
+            _ => Ok(InputFormat::Custom(s.to_string())),
+        }
     }
 }
 
@@ -128,6 +129,19 @@ pub enum OutputFormat {
     Custom(String),
 }
 
+impl FromStr for OutputFormat {
+    type Err = clap::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_ref() {
+            " " => Ok(OutputFormat::Space),
+            "json" => Ok(OutputFormat::JSON),
+            "csv" => Ok(OutputFormat::CSV),
+            _ => Ok(OutputFormat::Custom(s.to_string())),
+        }
+    }
+}
+
 impl ParsedLine {
     fn field(&self, f: &FieldSelector) -> Option<String> {
         match f {
@@ -142,8 +156,9 @@ impl ParsedLine {
         }
     }
 
-    fn output(&self, format: OutputFormat, sel: Vec<FieldSelector>) -> String {
-        match format {
+    fn output(&self, format: &Option<OutputFormat>, sel: &Vec<FieldSelector>) -> String {
+        let fmt = format.clone().unwrap_or(OutputFormat::Space);
+        match fmt {
             OutputFormat::Space => sel
                 .iter()
                 .map(|f| self.field(f))
@@ -227,7 +242,7 @@ mod tests {
         ] {
             assert_eq!(
                 *out,
-                ps.output(fmt.clone(), fs.to_vec()),
+                ps.output(&Some(fmt.clone()), fs),
                 "\n### TEST CASE: ps={:?} fmt={:?} fs={:?} ###\n",
                 *ps,
                 fmt,
@@ -256,7 +271,13 @@ mod tests {
     }
 
     #[test]
-    fn test_fmt() {
-        assert_eq!("b a", format!("{1} {0}", "a", "b"));
+    fn end_to_end() {
+        let c = cfg(&["-d,", "-f1"]);
+        println!("@> {:#?}", c);
+        let p = c.parser();
+        let pl = p("a,b,c");
+        println!("@> {:#?}", pl);
+        let out = pl.output(&c.output, &c.fields);
+        assert_eq!("b", out);
     }
 }
