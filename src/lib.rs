@@ -1,4 +1,5 @@
 use regex::Regex;
+use serde_json;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -46,9 +47,17 @@ pub struct Config {
 impl Config {
     pub fn parser(&self) -> impl Fn(&str) -> ParsedLine {
         match &self.input_format {
+            Some(InputFormat::JSON) => self.parser_json(),
             Some(_) => unimplemented!(),
             None => self.parser_delim(),
         }
+    }
+
+    fn parser_json(&self) -> impl Fn(&str) -> ParsedLine {
+        return move |line: &str| {
+            let v: serde_json::Value = serde_json::from_str(line).unwrap();
+            unimplemented!()
+        };
     }
 
     fn parser_delim(&self) -> impl Fn(&str) -> ParsedLine {
