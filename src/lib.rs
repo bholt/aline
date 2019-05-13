@@ -121,9 +121,13 @@ impl FromStr for FieldSelector {
     }
 }
 
+trait Fields {
+    fn field(f: FieldSelector) -> Option<String>;
+}
+
 // ParsedLine contains the parsed fields of a line
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct ParsedLine {
+pub struct ConcreteParsedLine {
     fields: Vec<String>,
     keys: HashMap<String, String>,
 }
