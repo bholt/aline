@@ -1,4 +1,4 @@
-use aline::Config;
+use aline::{output, Config};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader};
 use structopt::StructOpt;
@@ -17,7 +17,7 @@ fn main() {
         for line in rl.lines() {
             let l = line.expect("unable to read line");
             let pl = parse(&l);
-            let out = pl.output(&config.output, &config.fields);
+            let out = output(pl, &config.output, &config.fields);
             println!("{}", out);
         }
     }
@@ -32,7 +32,7 @@ fn main() {
         for line in fbuf.lines() {
             let l = line.expect("unable to read line");
             let pl = parse(&l);
-            let out = pl.output(&config.output, &config.fields);
+            let out = output(pl, &config.output, &config.fields);
             println!("{}", out);
         }
     }

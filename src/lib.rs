@@ -45,22 +45,23 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn parser(&self) -> impl Fn(&str) -> ParsedLine {
-        match &self.input_format {
+    pub fn parser(&self) -> impl Fn(&str) -> Box<dyn Fields> {
+        /*match &self.input_format {
             Some(InputFormat::JSON) => self.parser_json(),
             Some(_) => unimplemented!(),
             None => self.parser_delim(),
-        }
+        }*/
+        self.parser_delim()
     }
 
-    fn parser_json(&self) -> impl Fn(&str) -> ParsedLine {
+    fn parser_json(&self) -> impl Fn(&str) -> Box<dyn Fields> {
         return move |line: &str| {
             let v: serde_json::Value = serde_json::from_str(line).unwrap();
-            unimplemented!()
+            return Box::new(v);
         };
     }
 
-    fn parser_delim(&self) -> impl Fn(&str) -> ParsedLine {
+    fn parser_delim(&self) -> impl Fn(&str) -> Box<dyn Fields> {
         let delim = if let Some(d) = &self.delimiter {
             Regex::new(d).unwrap()
         } else {
@@ -71,14 +72,11 @@ impl Config {
         return move |line: &str| {
             // if this is splitting by whitespace then skip the first "field"
             let ltrim = if whitespace { line.trim() } else { line };
-            let parts = delim
+            let fields = delim
                 .split(&ltrim)
                 .map(String::from)
                 .collect::<Vec<String>>();
-            ParsedLine {
-                fields: parts,
-                keys: HashMap::new(),
-            }
+            return Box::new(DelimitedLine { fields });
         };
     }
 }
@@ -121,13 +119,43 @@ impl FromStr for FieldSelector {
     }
 }
 
-trait Fields {
-    fn field(f: FieldSelector) -> Option<String>;
+pub trait Fields {
+    fn field(&self, f: &FieldSelector) -> Option<String>;
+}
+
+pub struct DelimitedLine {
+    fields: Vec<String>,
+}
+
+impl Fields for DelimitedLine {
+    fn field(&self, f: &FieldSelector) -> Option<String> {
+        match f {
+            FieldSelector::Index(i) => {
+                if i < &self.fields.len() {
+                    Some(self.fields[*i].clone())
+                } else {
+                    None
+                }
+            }
+            FieldSelector::Key(k) => None,
+        }
+    }
+}
+
+impl Fields for serde_json::Value {
+    fn field(&self, f: &FieldSelector) -> Option<String> {
+        let v = match f {
+            FieldSelector::Index(i) => self.get(i),
+            FieldSelector::Key(k) => self.get(k),
+        };
+
+        return v.map(|v| format!("{}", v));
+    }
 }
 
 // ParsedLine contains the parsed fields of a line
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct ConcreteParsedLine {
+pub struct ParsedLine {
     fields: Vec<String>,
     keys: HashMap<String, String>,
 }
@@ -154,7 +182,7 @@ impl FromStr for OutputFormat {
     }
 }
 
-impl ParsedLine {
+impl Fields for ParsedLine {
     fn field(&self, f: &FieldSelector) -> Option<String> {
         match f {
             FieldSelector::Index(i) => {
@@ -167,31 +195,35 @@ impl ParsedLine {
             FieldSelector::Key(k) => self.keys.get(k).cloned(),
         }
     }
+}
 
-    pub fn output(&self, format: &Option<OutputFormat>, sel: &Vec<FieldSelector>) -> String {
-        let fmt = format.clone().unwrap_or(OutputFormat::Space);
-        match fmt {
-            OutputFormat::Space => sel
-                .iter()
-                .map(|f| self.field(f))
-                .flatten()
-                .collect::<Vec<String>>()
-                .join(" "),
-            OutputFormat::CSV => sel
-                .iter()
-                .map(|f| self.field(f))
-                .flatten()
-                .map(|f| {
-                    if f.contains(",") {
-                        format!("\"{}\"", f)
-                    } else {
-                        f
-                    }
-                })
-                .collect::<Vec<String>>()
-                .join(","),
-            _ => unimplemented!(),
-        }
+pub fn output(
+    fields: impl Fields,
+    format: &Option<OutputFormat>,
+    sel: &Vec<FieldSelector>,
+) -> String {
+    let fmt = format.clone().unwrap_or(OutputFormat::Space);
+    match fmt {
+        OutputFormat::Space => sel
+            .iter()
+            .map(|f| fields.field(f))
+            .flatten()
+            .collect::<Vec<String>>()
+            .join(" "),
+        OutputFormat::CSV => sel
+            .iter()
+            .map(|f| fields.field(f))
+            .flatten()
+            .map(|f| {
+                if f.contains(",") {
+                    format!("\"{}\"", f)
+                } else {
+                    f
+                }
+            })
+            .collect::<Vec<String>>()
+            .join(","),
+        _ => unimplemented!(),
     }
 }
 
