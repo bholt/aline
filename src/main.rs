@@ -17,7 +17,7 @@ fn main() {
         for line in rl.lines() {
             let l = line.expect("unable to read line");
             let pl = parse(&l);
-            let out = output(pl, &config.output, &config.fields);
+            let out = output(pl.as_ref(), &config.output, &config.fields);
             println!("{}", out);
         }
     }
@@ -32,7 +32,7 @@ fn main() {
         for line in fbuf.lines() {
             let l = line.expect("unable to read line");
             let pl = parse(&l);
-            let out = output(pl, &config.output, &config.fields);
+            let out = output(pl.as_ref(), &config.output, &config.fields);
             println!("{}", out);
         }
     }

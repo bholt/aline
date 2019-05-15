@@ -198,7 +198,7 @@ impl Fields for ParsedLine {
 }
 
 pub fn output(
-    fields: impl Fields,
+    fields: &dyn Fields,
     format: &Option<OutputFormat>,
     sel: &Vec<FieldSelector>,
 ) -> String {
