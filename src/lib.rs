@@ -45,13 +45,12 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn parser(&self) -> impl Fn(&str) -> Box<dyn Fields> {
-        /*match &self.input_format {
-            Some(InputFormat::JSON) => self.parser_json(),
+    pub fn parser(&self) -> Box<dyn Fn(&str) -> Box<dyn Fields>> {
+        match &self.input_format {
+            Some(InputFormat::JSON) => Box::new(self.parser_json()),
             Some(_) => unimplemented!(),
-            None => self.parser_delim(),
-        }*/
-        self.parser_delim()
+            None => Box::new(self.parser_delim()),
+        }
     }
 
     fn parser_json(&self) -> impl Fn(&str) -> Box<dyn Fields> {
@@ -137,7 +136,7 @@ impl Fields for DelimitedLine {
                     None
                 }
             }
-            FieldSelector::Key(k) => None,
+            FieldSelector::Key(_) => None,
         }
     }
 }
