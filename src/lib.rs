@@ -1,6 +1,7 @@
 use regex::Regex;
 use serde_json;
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::PathBuf;
 use std::str::FromStr;
 use structopt::{clap, StructOpt};
@@ -45,6 +46,17 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn parser_iter<R: Read + 'static>(
+        &self,
+        reader: R,
+    ) -> Box<dyn Iterator<Item = Box<dyn Fields + 'static>>> {
+        match &self.input_format {
+            Some(InputFormat::CSV) => Box::new(csv_parser(reader)),
+            Some(_) => unimplemented!(),
+            None => unimplemented!(),
+        }
+    }
+
     pub fn parser(&self) -> Box<dyn Fn(&str) -> Box<dyn Fields>> {
         match &self.input_format {
             Some(InputFormat::JSON) => Box::new(self.parser_json()),
@@ -54,10 +66,10 @@ impl Config {
     }
 
     fn parser_json(&self) -> impl Fn(&str) -> Box<dyn Fields> {
-        return move |line: &str| {
+        move |line: &str| {
             let v: serde_json::Value = serde_json::from_str(line).unwrap();
-            return Box::new(v);
-        };
+            Box::new(v)
+        }
     }
 
     fn parser_delim(&self) -> impl Fn(&str) -> Box<dyn Fields> {
@@ -68,7 +80,7 @@ impl Config {
         };
         let whitespace = self.delimiter.is_none();
 
-        return move |line: &str| {
+        move |line: &str| {
             // if this is splitting by whitespace then skip the first "field"
             let ltrim = if whitespace { line.trim() } else { line };
             let fields = delim
@@ -76,7 +88,31 @@ impl Config {
                 .map(String::from)
                 .collect::<Vec<String>>();
             return Box::new(DelimitedLine { fields });
-        };
+        }
+    }
+}
+
+fn csv_parser<R: Read>(reader: R) -> impl Iterator<Item = Box<dyn Fields + 'static>> {
+    csv::Reader::from_reader(reader)
+        .into_records()
+        .flat_map(|r| match r {
+            Ok(v) => {
+                let b: Box<dyn Fields> = Box::new(v);
+                Some(b)
+            }
+            Err(e) => {
+                eprintln!("record parsing error: {:?}", e);
+                None
+            }
+        })
+}
+
+impl Fields for csv::StringRecord {
+    fn field(&self, f: &FieldSelector) -> Option<String> {
+        match f {
+            FieldSelector::Index(i) => self.get(*i).map(|s| s.to_owned()),
+            FieldSelector::Key(_) => None,
+        }
     }
 }
 
