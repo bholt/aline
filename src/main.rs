@@ -17,19 +17,19 @@ impl Fields for CSVRecord {
     }
 }
 
-struct CSVParser<'r, R: Read> {
-    r: csv::StringRecordsIter<'r, R>,
+struct CSVParser<R: Read> {
+    r: csv::StringRecordsIntoIter<R>,
 }
 
-impl<'r, R: Read> CSVParser<'r, R> {
-    fn new(r: R + 'r) -> Self {
+impl<R: Read> CSVParser<R> {
+    fn new(r: R) -> Self {
         CSVParser {
-            r: csv::Reader::from_reader(r).records(),
+            r: csv::Reader::from_reader(r).into_records(),
         }
     }
 }
 
-impl<'r, R: Read> Iterator for CSVParser<'r, R> {
+impl<R: Read> Iterator for CSVParser<R> {
     type Item = Box<dyn Fields>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -44,6 +44,21 @@ impl<'r, R: Read> Iterator for CSVParser<'r, R> {
             None => None,
         }
     }
+}
+
+fn csv_parser<R: Read>(reader: R) -> impl Iterator<Item = Box<dyn Fields + 'static>> {
+    csv::Reader::from_reader(reader)
+        .into_records()
+        .flat_map(|r| match r {
+            Ok(v) => {
+                let b: Box<dyn Fields> = Box::new(CSVRecord { r: v });
+                Some(b)
+            }
+            Err(e) => {
+                eprintln!("record parsing error: {:?}", e);
+                None
+            }
+        })
 }
 
 fn main() {
@@ -72,18 +87,17 @@ fn main() {
         let f = File::open(fname).unwrap();
 
         if config.input_format == Some(InputFormat::CSV) {
-            for r in CSVParser::new(f) {
+            for r in csv_parser(f) {
                 println!("{}", output(r.as_ref(), &config.output, &config.fields));
             }
-        }
-
-        let fbuf = BufReader::new(f);
-
-        for line in fbuf.lines() {
-            let l = line.expect("unable to read line");
-            let pl = parse(&l);
-            let out = output(pl.as_ref(), &config.output, &config.fields);
-            println!("{}", out);
+        } else {
+            let fbuf = BufReader::new(f);
+            for line in fbuf.lines() {
+                let l = line.expect("unable to read line");
+                let pl = parse(&l);
+                let out = output(pl.as_ref(), &config.output, &config.fields);
+                println!("{}", out);
+            }
         }
     }
 }
