@@ -1,7 +1,7 @@
 use regex::Regex;
 use serde_json;
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::{BufRead, BufReader, Read};
 use std::path::PathBuf;
 use std::str::FromStr;
 use structopt::{clap, StructOpt};
@@ -52,8 +52,9 @@ impl Config {
     ) -> Box<dyn Iterator<Item = Box<dyn Fields + 'static>>> {
         match &self.input_format {
             Some(InputFormat::CSV) => Box::new(csv_parser(reader)),
+            Some(InputFormat::JSON) => Box::new(self.json_parser_iter(reader)),
             Some(_) => unimplemented!(),
-            None => unimplemented!(),
+            None => Box::new(self.delim_parser_iter(reader)),
         }
     }
 
@@ -72,6 +73,23 @@ impl Config {
         }
     }
 
+    fn json_parser_iter<R: Read>(
+        &self,
+        reader: R,
+    ) -> impl Iterator<Item = Box<dyn Fields + 'static>> {
+        BufReader::new(reader).lines().flat_map(move |r| match r {
+            Ok(line) => {
+                let v: serde_json::Value = serde_json::from_str(line.as_str()).unwrap();
+                let b: Box<dyn Fields> = Box::new(v);
+                Some(b)
+            }
+            Err(e) => {
+                eprintln!("line parsing error: {:?}", e);
+                None
+            }
+        })
+    }
+
     fn parser_delim(&self) -> impl Fn(&str) -> Box<dyn Fields> {
         let delim = if let Some(d) = &self.delimiter {
             Regex::new(d).unwrap()
@@ -87,8 +105,42 @@ impl Config {
                 .split(&ltrim)
                 .map(String::from)
                 .collect::<Vec<String>>();
-            return Box::new(DelimitedLine { fields });
+            Box::new(DelimitedLine { fields })
         }
+    }
+
+    fn delim_parser_iter<R: Read>(
+        &self,
+        reader: R,
+    ) -> impl Iterator<Item = Box<dyn Fields + 'static>> {
+        let delim = if let Some(d) = &self.delimiter {
+            Regex::new(d).unwrap()
+        } else {
+            Regex::new(r"\s+").unwrap()
+        };
+        let whitespace = self.delimiter.is_none();
+        BufReader::new(reader).lines().flat_map(move |r| {
+            match r {
+                Ok(line) => {
+                    // if this is splitting by whitespace then skip the first "field"
+                    let ltrim = if whitespace {
+                        line.trim()
+                    } else {
+                        line.as_ref()
+                    };
+                    let fields = delim
+                        .split(&ltrim)
+                        .map(String::from)
+                        .collect::<Vec<String>>();
+                    let b: Box<dyn Fields> = Box::new(DelimitedLine { fields });
+                    Some(b)
+                }
+                Err(e) => {
+                    eprintln!("line parsing error: {:?}", e);
+                    None
+                }
+            }
+        })
     }
 }
 
@@ -268,11 +320,11 @@ pub fn output(
 
 #[cfg(test)]
 mod tests {
+    use crate::FieldSelector::*;
+    use crate::OutputFormat::*;
     use crate::{Config, FieldSelector, OutputFormat, ParsedLine};
     use std::collections::HashMap;
     use structopt::StructOpt;
-    use FieldSelector::*;
-    use OutputFormat::*;
 
     /// Helper to create a Config from flags for testing
     fn cfg(args: &[&str]) -> Config {
