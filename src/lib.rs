@@ -1,4 +1,4 @@
-use regex::Regex;
+use regex::{Captures, Regex};
 use serde_json;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
@@ -157,6 +157,59 @@ fn csv_parser<R: Read>(reader: R) -> impl Iterator<Item = Box<dyn Fields + 'stat
                 None
             }
         })
+}
+
+fn custom_parser_iter<R: Read>(
+    input: &str,
+    reader: R,
+) -> impl Iterator<Item = Box<dyn Fields + 'static>> {
+    let pattern = Regex::new(input).unwrap();
+    BufReader::new(reader).lines().flat_map(move |r| match r {
+        Ok(line) => match pattern.captures(line.as_str()) {
+            Some(c) => {
+                let b: Box<dyn Fields> = Box::new(RegexLine::new(&pattern, &c));
+                Some(b)
+            }
+            None => None,
+        },
+        Err(e) => {
+            eprintln!("line parsing error: {:?}", e);
+            None
+        }
+    })
+}
+
+struct RegexLine {
+    groups: Vec<Option<String>>,
+    named_groups: HashMap<String, String>,
+}
+
+impl RegexLine {
+    fn new<'t>(pattern: &Regex, captures: &Captures<'t>) -> Self {
+        let mut r = RegexLine {
+            groups: captures
+                .iter()
+                .map(|m| m.map(|m| m.as_str().to_string()))
+                .collect(),
+            named_groups: HashMap::new(),
+        };
+        for name in pattern.capture_names().flatten() {
+            if let Some(m) = captures.name(name) {
+                r.named_groups
+                    .insert(name.to_string(), m.as_str().to_string());
+            }
+        }
+        r
+    }
+}
+
+impl Fields for RegexLine {
+    fn field(&self, f: &FieldSelector) -> Option<String> {
+        match f {
+            FieldSelector::Index(i) => self.groups.get(*i).unwrap(),
+            FieldSelector::Key(k) => self.named_groups.get(k),
+        }
+    }
 }
 
 impl Fields for csv::StringRecord {
