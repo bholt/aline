@@ -53,7 +53,7 @@ impl Config {
         match &self.input_format {
             Some(InputFormat::CSV) => Box::new(csv_parser(reader)),
             Some(InputFormat::JSON) => Box::new(self.json_parser_iter(reader)),
-            Some(_) => unimplemented!(),
+            Some(InputFormat::Custom(s)) => Box::new(custom_parser_iter(s, reader)),
             None => Box::new(self.delim_parser_iter(reader)),
         }
     }
@@ -206,8 +206,14 @@ impl RegexLine {
 impl Fields for RegexLine {
     fn field(&self, f: &FieldSelector) -> Option<String> {
         match f {
-            FieldSelector::Index(i) => self.groups.get(*i).unwrap(),
-            FieldSelector::Key(k) => self.named_groups.get(k),
+            FieldSelector::Index(i) => {
+                if *i >= self.groups.len() {
+                    None
+                } else {
+                    self.groups[*i].clone()
+                }
+            }
+            FieldSelector::Key(k) => self.named_groups.get(k).map(ToOwned::to_owned),
         }
     }
 }
@@ -337,11 +343,7 @@ impl Fields for ParsedLine {
     }
 }
 
-pub fn output(
-    fields: &dyn Fields,
-    format: &Option<OutputFormat>,
-    sel: &Vec<FieldSelector>,
-) -> String {
+pub fn output(fields: &dyn Fields, format: &Option<OutputFormat>, sel: &[FieldSelector]) -> String {
     let fmt = format.clone().unwrap_or(OutputFormat::Space);
     match fmt {
         OutputFormat::Space => sel
@@ -375,7 +377,7 @@ pub fn output(
 mod tests {
     use crate::FieldSelector::*;
     use crate::OutputFormat::*;
-    use crate::{Config, FieldSelector, OutputFormat, ParsedLine};
+    use crate::{output, Config, FieldSelector, OutputFormat, ParsedLine};
     use std::collections::HashMap;
     use structopt::StructOpt;
 
@@ -426,7 +428,7 @@ mod tests {
         ] {
             assert_eq!(
                 *out,
-                ps.output(&Some(fmt.clone()), fs),
+                output(ps, &Some(fmt.clone()), fs),
                 "\n### TEST CASE: ps={:?} fmt={:?} fs={:?} ###\n",
                 *ps,
                 fmt,
@@ -459,7 +461,7 @@ mod tests {
         let c = cfg(&["-d,", "-f1"]);
         let p = c.parser();
         let pl = p("a,b,c");
-        let out = pl.output(&c.output, &c.fields);
+        let out = output(pl.as_ref(), &c.output, &c.fields);
         assert_eq!("b", out);
     }
 }
