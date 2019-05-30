@@ -58,21 +58,6 @@ impl Config {
         }
     }
 
-    pub fn parser(&self) -> Box<dyn Fn(&str) -> Box<dyn Fields>> {
-        match &self.input_format {
-            Some(InputFormat::JSON) => Box::new(self.parser_json()),
-            Some(_) => unimplemented!(),
-            None => Box::new(self.parser_delim()),
-        }
-    }
-
-    fn parser_json(&self) -> impl Fn(&str) -> Box<dyn Fields> {
-        move |line: &str| {
-            let v: serde_json::Value = serde_json::from_str(line).unwrap();
-            Box::new(v)
-        }
-    }
-
     fn json_parser_iter<R: Read>(
         &self,
         reader: R,
@@ -88,25 +73,6 @@ impl Config {
                 None
             }
         })
-    }
-
-    fn parser_delim(&self) -> impl Fn(&str) -> Box<dyn Fields> {
-        let delim = if let Some(d) = &self.delimiter {
-            Regex::new(d).unwrap()
-        } else {
-            Regex::new(r"\s+").unwrap()
-        };
-        let whitespace = self.delimiter.is_none();
-
-        move |line: &str| {
-            // if this is splitting by whitespace then skip the first "field"
-            let ltrim = if whitespace { line.trim() } else { line };
-            let fields = delim
-                .split(&ltrim)
-                .map(String::from)
-                .collect::<Vec<String>>();
-            Box::new(DelimitedLine { fields })
-        }
     }
 
     fn delim_parser_iter<R: Read>(
