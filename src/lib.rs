@@ -340,13 +340,15 @@ pub fn output(fields: &dyn Fields, format: &Option<OutputFormat>, sel: &[FieldSe
 
 #[cfg(test)]
 mod tests {
-
     use crate::{output, Config};
+    use shlex;
     use structopt::StructOpt;
 
     /// Helper to create a Config from flags for testing
-    fn cfg(args: &[&str]) -> Config {
-        Config::from_iter_safe([&["aline"], args].concat()).expect("invalid config flags")
+    fn cfg(args: &str) -> Config {
+        let mut args = shlex::split(args).expect("invalid args string");
+        args.insert(0, "aline".to_owned());
+        Config::from_iter_safe(args).expect("invalid config flags")
     }
 
     #[test]
@@ -356,21 +358,25 @@ mod tests {
                 delimiter: Some(",".to_string()),
                 ..Config::default()
             },
-            cfg(&["-d,"]),
+            cfg("-d,"),
         )
     }
 
     #[test]
     fn end_to_end() {
-        fn e2e(line: &'static str, args: &[&str]) -> String {
+        fn e2e(line: &'static str, args: &str) -> String {
             let config = cfg(args);
             let mut iter = config.parser_iter(line.as_bytes());
             let fields = iter.next().expect("at least one parsed line");
             output(fields.as_ref(), &config.output, &config.fields)
         }
         let l = "a,b,c";
-        assert_eq!(e2e(l, &["-d,", "-f1"]), "b");
-        assert_eq!(e2e(l, &["-d,", "-f2"]), "c");
+        assert_eq!(e2e(l, "-d, -f1"), "b");
+        assert_eq!(e2e(l, "-d, -f2"), "c");
         //assert_eq!(e2e(l, &["-d,", "-f1,2"]), "b c");
     }
+
+    //    macro_rules! e2e_assert {
+    //        ($name:ident, $line:expr, $args:expr) => {};
+    //    }
 }
