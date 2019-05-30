@@ -221,7 +221,7 @@ impl Fields for RegexLine {
 impl Fields for csv::StringRecord {
     fn field(&self, f: &FieldSelector) -> Option<String> {
         match f {
-            FieldSelector::Index(i) => self.get(*i).map(|s| s.to_owned()),
+            FieldSelector::Index(i) => self.get(*i).map(ToOwned::to_owned),
             FieldSelector::Key(_) => None,
         }
     }
@@ -277,7 +277,7 @@ impl Fields for DelimitedLine {
     fn field(&self, f: &FieldSelector) -> Option<String> {
         match f {
             FieldSelector::Index(i) => {
-                if i < &self.fields.len() {
+                if *i < self.fields.len() {
                     Some(self.fields[*i].clone())
                 } else {
                     None
@@ -294,8 +294,7 @@ impl Fields for serde_json::Value {
             FieldSelector::Index(i) => self.get(i),
             FieldSelector::Key(k) => self.get(k),
         };
-
-        return v.map(|v| format!("{}", v));
+        v.map(|v| format!("{}", v))
     }
 }
 
@@ -332,7 +331,7 @@ impl Fields for ParsedLine {
     fn field(&self, f: &FieldSelector) -> Option<String> {
         match f {
             FieldSelector::Index(i) => {
-                if i < &self.fields.len() {
+                if *i < self.fields.len() {
                     Some(self.fields[*i].clone())
                 } else {
                     None
@@ -357,7 +356,7 @@ pub fn output(fields: &dyn Fields, format: &Option<OutputFormat>, sel: &[FieldSe
             .map(|f| fields.field(f))
             .flatten()
             .map(|f| {
-                if f.contains(",") {
+                if f.contains(',') {
                     format!("\"{}\"", f)
                 } else {
                     f
@@ -375,23 +374,13 @@ pub fn output(fields: &dyn Fields, format: &Option<OutputFormat>, sel: &[FieldSe
 
 #[cfg(test)]
 mod tests {
-    use crate::FieldSelector::*;
-    use crate::OutputFormat::*;
-    use crate::{output, Config, FieldSelector, OutputFormat, ParsedLine};
-    use std::collections::HashMap;
+
+    use crate::{output, Config};
     use structopt::StructOpt;
 
     /// Helper to create a Config from flags for testing
     fn cfg(args: &[&str]) -> Config {
         Config::from_iter_safe([&["aline"], args].concat()).expect("invalid config flags")
-    }
-
-    /// Helper to create parsed line for testing
-    fn pline(fields: &[&str]) -> ParsedLine {
-        ParsedLine {
-            fields: fields.iter().map(|s| String::from(*s)).collect(),
-            keys: HashMap::new(),
-        }
     }
 
     #[test]
@@ -406,62 +395,16 @@ mod tests {
     }
 
     #[test]
-    fn parsed_line_output() {
-        for (ps, fmt, fs, out) in &[
-            (pline(&["a", "b"]), Space, vec![Index(0)], "a"),
-            (pline(&["a", "b"]), Space, vec![Index(1)], "b"),
-            (pline(&["a", "b"]), Space, vec![Index(0), Index(1)], "a b"),
-            (pline(&["a", "b"]), CSV, vec![Index(1)], "b"),
-            (pline(&["a", "b"]), CSV, vec![Index(0), Index(1)], "a,b"),
-            (
-                pline(&["a", "b,c"]),
-                CSV,
-                vec![Index(0), Index(1)],
-                "a,\"b,c\"",
-            ),
-            (
-                pline(&["a", "b", "c"]),
-                CSV,
-                vec![Index(0), Index(1), Index(2)],
-                "a,b,c",
-            ),
-        ] {
-            assert_eq!(
-                *out,
-                output(ps, &Some(fmt.clone()), fs),
-                "\n### TEST CASE: ps={:?} fmt={:?} fs={:?} ###\n",
-                *ps,
-                fmt,
-                fs
-            );
-        }
-    }
-
-    #[test]
-    fn parser() {
-        for (line, config, expect) in &[
-            ("a b", cfg(&[]), pline(&["a", "b"])),
-            ("a  b", cfg(&[]), pline(&["a", "b"])),
-            (" a  b  ", cfg(&[]), pline(&["a", "b"])), // skip leading whitespace
-            ("a,b", cfg(&["-d,"]), pline(&["a", "b"])),
-            ("a,,b", cfg(&["-d,"]), pline(&["a", "", "b"])), // include empty comma fields
-        ] {
-            assert_eq!(
-                config.parser()(line),
-                *expect,
-                "\n### TEST CASE: line={:?} config={:?} ###\n",
-                *line,
-                config
-            );
-        }
-    }
-
-    #[test]
     fn end_to_end() {
-        let c = cfg(&["-d,", "-f1"]);
-        let p = c.parser();
-        let pl = p("a,b,c");
-        let out = output(pl.as_ref(), &c.output, &c.fields);
-        assert_eq!("b", out);
+        fn e2e(line: &'static str, args: &[&str]) -> String {
+            let config = cfg(args);
+            let mut iter = config.parser_iter(line.as_bytes());
+            let fields = iter.next().expect("at least one parsed line");
+            output(fields.as_ref(), &config.output, &config.fields)
+        }
+        let l = "a,b,c";
+        assert_eq!(e2e(l, &["-d,", "-f1"]), "b");
+        assert_eq!(e2e(l, &["-d,", "-f2"]), "c");
+        //assert_eq!(e2e(l, &["-d,", "-f1,2"]), "b c");
     }
 }
