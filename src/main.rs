@@ -11,7 +11,7 @@ fn main() {
 
     if config.inputs.is_empty() {
         for r in config.parser_iter(stdin()) {
-            println!("{}", output(r.as_ref(), &config.output, &config.fields));
+            println!("{}", output(r.as_ref(), &config));
         }
     }
 
@@ -21,7 +21,7 @@ fn main() {
         }
         let f = File::open(fname).unwrap();
         for r in config.parser_iter(f) {
-            println!("{}", output(r.as_ref(), &config.output, &config.fields));
+            println!("{}", output(r.as_ref(), &config));
         }
     }
 }

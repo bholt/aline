@@ -31,7 +31,7 @@ pub struct Config {
 
     #[structopt(short = "f", long = "field")]
     /// Field(s) to print, specified by number or name (depending on the input format).
-    pub fields: Vec<FieldSelector>,
+    pub fields: FieldSelectors,
 
     #[structopt(short = "o", long = "output")]
     // Output format
@@ -43,6 +43,31 @@ pub struct Config {
     #[structopt(short = "p", long = "print-filenames")]
     /// Print each filename prefixed with '#' before its results
     pub print_filename: bool,
+}
+
+#[derive(Debug, Default, Eq, PartialEq)]
+pub struct FieldSelectors {
+    r: Vec<FieldSelector>,
+}
+
+// Implement FromStr for our custom type so we can parse comma-delimited fields like `-f 1,2`
+impl FromStr for FieldSelectors {
+    type Err = clap::Error;
+
+    fn from_str(arg: &str) -> Result<Self, Self::Err> {
+        Ok(FieldSelectors {
+            r: arg
+                .split(',')
+                .map(|s| FieldSelector::from_str(s))
+                .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
+}
+
+impl AsRef<[FieldSelector]> for FieldSelectors {
+    fn as_ref(&self) -> &[FieldSelector] {
+        &self.r
+    }
 }
 
 impl Config {
@@ -308,16 +333,21 @@ impl Fields for ParsedLine {
     }
 }
 
-pub fn output(fields: &dyn Fields, format: &Option<OutputFormat>, sel: &[FieldSelector]) -> String {
-    let fmt = format.clone().unwrap_or(OutputFormat::Space);
+pub fn output(fields: impl AsRef<dyn Fields>, config: &Config) -> String {
+    let fields = fields.as_ref();
+    let fmt = config.output.clone().unwrap_or(OutputFormat::Space);
     match fmt {
-        OutputFormat::Space => sel
+        OutputFormat::Space => config
+            .fields
+            .as_ref()
             .iter()
             .map(|f| fields.field(f))
             .flatten()
             .collect::<Vec<String>>()
             .join(" "),
-        OutputFormat::CSV => sel
+        OutputFormat::CSV => config
+            .fields
+            .as_ref()
             .iter()
             .map(|f| fields.field(f))
             .flatten()
@@ -368,7 +398,7 @@ mod tests {
             let config = cfg(args);
             let mut iter = config.parser_iter(line.as_bytes());
             let fields = iter.next().expect("at least one parsed line");
-            output(fields.as_ref(), &config.output, &config.fields)
+            output(&fields, &config)
         }
         let l = "a,b,c";
         assert_eq!(e2e(l, "-d, -f1"), "b");
@@ -376,7 +406,21 @@ mod tests {
         //assert_eq!(e2e(l, &["-d,", "-f1,2"]), "b c");
     }
 
-    //    macro_rules! e2e_assert {
-    //        ($name:ident, $line:expr, $args:expr) => {};
-    //    }
+    macro_rules! e2e_assert {
+        ($line:expr, $args:expr, $expect:expr) => {
+            let config = cfg($args);
+            let mut iter = config.parser_iter($line.as_bytes());
+            let fields = iter.next().expect("at least one parsed line");
+            let out = output(&fields, &config);
+            assert_eq!(out, $expect, "\nconfig: {:#?}", config);
+        };
+    }
+
+    #[test]
+    fn end_to_end_macro() {
+        let l = "a,b,c";
+        e2e_assert!(l, "-d, -f1", "b");
+        e2e_assert!(l, "-d, -f2", "c");
+        e2e_assert!(l, "-d, -f1,2", "b c");
+    }
 }
