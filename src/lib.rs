@@ -1,5 +1,6 @@
 use regex::{Captures, Regex};
 use serde_json;
+use std::any::Any;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
 use std::path::PathBuf;
@@ -50,6 +51,17 @@ pub struct FieldSelectors {
     r: Vec<FieldSelector>,
 }
 
+impl FieldSelectors {
+    fn has_named_fields(&self) -> bool {
+        for f in &self.r {
+            if let FieldSelector::Key(_) = f {
+                return true;
+            }
+        }
+        false
+    }
+}
+
 // Implement FromStr for our custom type so we can parse comma-delimited fields like `-f 1,2`
 impl FromStr for FieldSelectors {
     type Err = clap::Error;
@@ -76,7 +88,7 @@ impl Config {
         reader: R,
     ) -> Box<dyn Iterator<Item = Box<dyn Fields + 'static>>> {
         match &self.input_format {
-            Some(InputFormat::CSV) => Box::new(csv_parser(reader)),
+            Some(InputFormat::CSV) => Box::new(self.csv_parser(reader)),
             Some(InputFormat::JSON) => Box::new(self.json_parser_iter(reader)),
             Some(InputFormat::Custom(s)) => Box::new(custom_parser_iter(s, reader)),
             None => Box::new(self.delim_parser_iter(reader)),
@@ -119,10 +131,7 @@ impl Config {
                     } else {
                         line.as_ref()
                     };
-                    let fields = delim
-                        .split(&ltrim)
-                        .map(String::from)
-                        .collect::<Vec<String>>();
+                    let fields: Vec<_> = delim.split(&ltrim).map(String::from).collect();
                     let b: Box<dyn Fields> = Box::new(DelimitedLine { fields });
                     Some(b)
                 }
@@ -133,14 +142,28 @@ impl Config {
             }
         })
     }
-}
 
-fn csv_parser<R: Read>(reader: R) -> impl Iterator<Item = Box<dyn Fields + 'static>> {
-    csv::Reader::from_reader(reader)
-        .into_records()
-        .flat_map(|r| match r {
+    fn csv_parser<R: Read>(&self, reader: R) -> impl Iterator<Item = Box<dyn Fields + 'static>> {
+        let has_header = self.fields.has_named_fields();
+
+        let mut rb = csv::ReaderBuilder::new();
+        rb.flexible(true);
+        rb.has_headers(has_header);
+
+        let mut r = rb.from_reader(reader);
+
+        let h = Box::new(csv_header_map(if has_header {
+            r.headers().ok()
+        } else {
+            None
+        }));
+
+        r.into_records().flat_map(|r| match r {
             Ok(v) => {
-                let b: Box<dyn Fields> = Box::new(v);
+                let b: Box<dyn Fields> = Box::new(CSVRecord {
+                    row: v,
+                    header: h.clone(),
+                });
                 Some(b)
             }
             Err(e) => {
@@ -148,6 +171,7 @@ fn csv_parser<R: Read>(reader: R) -> impl Iterator<Item = Box<dyn Fields + 'stat
                 None
             }
         })
+    }
 }
 
 fn custom_parser_iter<R: Read>(
@@ -156,6 +180,7 @@ fn custom_parser_iter<R: Read>(
 ) -> impl Iterator<Item = Box<dyn Fields + 'static>> {
     let pattern = Regex::new(input).unwrap();
     BufReader::new(reader).lines().flat_map(move |r| match r {
+        // TODO: try to replace with some native regex match struct rather than converting to vec/map
         Ok(line) => match pattern.captures(line.as_str()) {
             Some(c) => {
                 let b: Box<dyn Fields> = Box::new(RegexLine::new(&pattern, &c));
@@ -170,6 +195,7 @@ fn custom_parser_iter<R: Read>(
     })
 }
 
+/// Extracted regex match groups
 struct RegexLine {
     groups: Vec<Option<String>>,
     named_groups: HashMap<String, String>,
@@ -209,11 +235,32 @@ impl Fields for RegexLine {
     }
 }
 
-impl Fields for csv::StringRecord {
+fn csv_header_map(h: Option<&csv::StringRecord>) -> HashMap<String, usize> {
+    let mut m = HashMap::new();
+    if let Some(h) = h {
+        for (i, f) in h.iter().enumerate() {
+            m.insert(f.to_owned(), i);
+        }
+    }
+    m
+}
+
+struct CSVRecord {
+    row: csv::StringRecord,
+    header: Box<HashMap<String, usize>>,
+}
+
+impl Fields for CSVRecord {
     fn field(&self, f: &FieldSelector) -> Option<String> {
         match f {
-            FieldSelector::Index(i) => self.get(*i).map(ToOwned::to_owned),
-            FieldSelector::Key(_) => None,
+            FieldSelector::Index(i) => self.row.get(*i).map(ToOwned::to_owned),
+            FieldSelector::Key(k) => {
+                if let Some(i) = &self.header.get(k) {
+                    self.row.get(**i).map(ToOwned::to_owned)
+                } else {
+                    None
+                }
+            }
         }
     }
 }
@@ -422,5 +469,6 @@ mod tests {
         e2e_assert!(l, "-d, -f1", "b");
         e2e_assert!(l, "-d, -f2", "c");
         e2e_assert!(l, "-d, -f1,2", "b c");
+        e2e_assert!(l, "-i csv -f1", "b");
     }
 }
