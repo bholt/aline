@@ -510,5 +510,12 @@ mod tests {
             "-i csv -o json -f c,b",
             r#"{"b":"1","c":"2"}"#
         );
+
+        let json_map = r#"{"a":0, "b": "bb", "c": 2}"#;
+        e2e_assert!(json_map, "-i json -f a", "0");
+        e2e_assert!(json_map, "-i json -f a,b", "0 bb");
+        e2e_assert!(json_map, "-i json -o csv -f a,b", "0,bb");
+        let json_list = r#"[0, "bb", 2]"#;
+        e2e_assert!(json_list, "-i json -o csv -f 0,1", "0,bb");
     }
 }
