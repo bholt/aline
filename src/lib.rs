@@ -1,7 +1,9 @@
 use regex::{Captures, Regex};
+use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
+use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::str::FromStr;
 use structopt::{clap, StructOpt};
@@ -285,10 +287,19 @@ impl FromStr for InputFormat {
 }
 
 /// Selects a field to output
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum FieldSelector {
     Index(usize),
     Key(String),
+}
+
+impl ToString for FieldSelector {
+    fn to_string(&self) -> String {
+        match self {
+            FieldSelector::Index(i) => format!("{}", i),
+            FieldSelector::Key(k) => k.to_owned(),
+        }
+    }
 }
 
 impl FromStr for FieldSelector {
@@ -406,6 +417,18 @@ pub fn output(fields: impl AsRef<dyn Fields>, config: &Config) -> String {
             })
             .collect::<Vec<String>>()
             .join(","),
+        OutputFormat::JSON => {
+            let iter = config.fields.as_ref().iter().map(|f| {
+                (
+                    f.to_string(),
+                    fields
+                        .field(f)
+                        .map_or_else(|| serde_json::Value::Null, serde_json::Value::String),
+                )
+            });
+            let fmap = serde_json::Map::from_iter(iter);
+            serde_json::to_string(&fmap).unwrap()
+        }
         _ => unimplemented!(),
     }
 }
@@ -471,9 +494,15 @@ mod tests {
         e2e_assert!(l, "-i csv -f1", "b");
         e2e_assert!(l, "-i csv -f0,2", "a c");
         e2e_assert!(l, "-i csv -o csv -f0,2", "a,c");
+        e2e_assert!(l, "-d, -o json -f0,2", r#"{"0":"a","2":"c"}"#);
 
         let line_with_header = "a,b,c\n0,1,2";
         e2e_assert!(line_with_header, "-i csv -o csv -f a", "0");
         e2e_assert!(line_with_header, "-i csv -o csv -f c,b", "2,1");
+        e2e_assert!(
+            line_with_header,
+            "-i csv -o json -f c,b",
+            r#"{"b":"1","c":"2"}"#
+        );
     }
 }
