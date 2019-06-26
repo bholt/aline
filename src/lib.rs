@@ -345,7 +345,10 @@ impl Fields for serde_json::Value {
             FieldSelector::Index(i) => self.get(i),
             FieldSelector::Key(k) => self.get(k),
         };
-        v.map(|v| format!("{}", v))
+        v.map(|v| match v {
+            serde_json::Value::String(s) => s.to_owned(),
+            _ => format!("{}", v),
+        })
     }
 }
 
