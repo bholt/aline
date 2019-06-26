@@ -1,6 +1,5 @@
 use regex::{Captures, Regex};
 use serde_json;
-use std::any::Any;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
 use std::path::PathBuf;
@@ -158,7 +157,7 @@ impl Config {
             None
         }));
 
-        r.into_records().flat_map(|r| match r {
+        r.into_records().flat_map(move |r| match r {
             Ok(v) => {
                 let b: Box<dyn Fields> = Box::new(CSVRecord {
                     row: v,
@@ -470,5 +469,7 @@ mod tests {
         e2e_assert!(l, "-d, -f2", "c");
         e2e_assert!(l, "-d, -f1,2", "b c");
         e2e_assert!(l, "-i csv -f1", "b");
+        e2e_assert!(l, "-i csv -f0,2", "a c");
+        e2e_assert!(l, "-i csv -o csv -f0,2", "a,c");
     }
 }
