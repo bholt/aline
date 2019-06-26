@@ -471,5 +471,9 @@ mod tests {
         e2e_assert!(l, "-i csv -f1", "b");
         e2e_assert!(l, "-i csv -f0,2", "a c");
         e2e_assert!(l, "-i csv -o csv -f0,2", "a,c");
+
+        let line_with_header = "a,b,c\n0,1,2";
+        e2e_assert!(line_with_header, "-i csv -o csv -f a", "0");
+        e2e_assert!(line_with_header, "-i csv -o csv -f c,b", "2,1");
     }
 }
