@@ -408,6 +408,7 @@ pub fn output(fields: impl AsRef<dyn Fields>, config: &Config) -> String {
             .flatten()
             .collect::<Vec<String>>()
             .join(" "),
+        // TODO: fix CSV output to use CSV library and support header
         OutputFormat::CSV => config
             .fields
             .as_ref()
