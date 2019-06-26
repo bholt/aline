@@ -197,6 +197,7 @@ fn custom_parser_iter<R: Read>(
 }
 
 /// Extracted regex match groups
+#[derive(Debug)]
 struct RegexLine {
     groups: Vec<Option<String>>,
     named_groups: HashMap<String, String>,
@@ -246,6 +247,7 @@ fn csv_header_map(h: Option<&csv::StringRecord>) -> HashMap<String, usize> {
     m
 }
 
+#[derive(Debug)]
 struct CSVRecord {
     row: csv::StringRecord,
     header: Box<HashMap<String, usize>>,
@@ -313,10 +315,11 @@ impl FromStr for FieldSelector {
     }
 }
 
-pub trait Fields {
+pub trait Fields: std::fmt::Debug {
     fn field(&self, f: &FieldSelector) -> Option<String>;
 }
 
+#[derive(Debug)]
 pub struct DelimitedLine {
     fields: Vec<String>,
 }
