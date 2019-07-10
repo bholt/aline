@@ -562,13 +562,15 @@ mod tests {
             let mut out = String::new();
             config.output(iter, &mut out);
             let mut want = String::from($expect);
-            want.push('\n');
+            if !want.ends_with('\n') {
+                want.push('\n');
+            }
             assert_eq!(out, want, "\nconfig: {:#?}", config);
         };
     }
 
     #[test]
-    fn end_to_end_macro() {
+    fn csv() {
         let l = "a,b,c";
         e2e_assert!(l, "-d, -f1", "b");
         e2e_assert!(l, "-d, -f2", "c");
@@ -577,7 +579,10 @@ mod tests {
         e2e_assert!(l, "-i csv -f0,2", "a c");
         e2e_assert!(l, "-i csv -o csv -f0,2", "a,c");
         e2e_assert!(l, "-d, -o json -f0,2", r#"{"0":"a","2":"c"}"#);
+    }
 
+    #[test]
+    fn csv_with_header() {
         let line_with_header = "a,b,c\n0,1,2";
         e2e_assert!(line_with_header, "-i csv -o csv -f a", "0");
         e2e_assert!(line_with_header, "-i csv -o csv -f c,b", "2,1");
@@ -586,7 +591,10 @@ mod tests {
             "-i csv -o json -f c,b",
             r#"{"b":"1","c":"2"}"#
         );
+    }
 
+    #[test]
+    fn json() {
         let json_map = r#"{"a":0, "b": "bb", "c": 2}"#;
         e2e_assert!(json_map, "-i json -f a", "0");
         e2e_assert!(json_map, "-i json -f a,b", "0 bb");
