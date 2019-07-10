@@ -2,6 +2,7 @@ use regex::{Captures, Regex};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
+use std::fmt;
 use std::io::{BufRead, BufReader, Read};
 use std::iter::FromIterator;
 use std::path::PathBuf;
@@ -84,6 +85,15 @@ impl AsRef<[FieldSelector]> for FieldSelectors {
 }
 
 impl Config {
+    pub fn parse_and_output(&self, reader: impl Read, writer: impl fmt::Write) {
+        match &self.input_format {
+            Some(InputFormat::CSV) => self.output(self.csv_parser(reader), writer),
+            Some(InputFormat::JSON) => self.output(self.json_parser_iter(reader), writer),
+            Some(InputFormat::Custom(s)) => self.output(custom_parser_iter(s, reader), writer),
+            None => self.output(self.delim_parser_iter(reader), writer),
+        }
+    }
+
     pub fn parser_iter<R: Read + 'static>(
         &self,
         reader: R,
@@ -93,6 +103,68 @@ impl Config {
             Some(InputFormat::JSON) => Box::new(self.json_parser_iter(reader)),
             Some(InputFormat::Custom(s)) => Box::new(custom_parser_iter(s, reader)),
             None => Box::new(self.delim_parser_iter(reader)),
+        }
+    }
+
+    fn output(&self, iter: impl Iterator<Item = Box<dyn Fields>>, writer: impl fmt::Write) {
+        let mut w = writer;
+        let output = self.output.clone().unwrap_or(OutputFormat::Space);
+        match output {
+            OutputFormat::Space => {
+                for fields in iter {
+                    writeln!(
+                        w,
+                        "{}",
+                        self.fields
+                            .as_ref()
+                            .iter()
+                            .map(|f| fields.field(f))
+                            .flatten()
+                            .collect::<Vec<String>>()
+                            .join(" ")
+                    )
+                    .unwrap();
+                }
+            }
+            OutputFormat::CSV => {
+                for fields in iter {
+                    writeln!(
+                        w,
+                        "{}",
+                        self.fields
+                            .as_ref()
+                            .iter()
+                            .map(|f| fields.field(f))
+                            .flatten()
+                            .map(|f| {
+                                if f.contains(',') {
+                                    format!("\"{}\"", f)
+                                } else {
+                                    f
+                                }
+                            })
+                            .collect::<Vec<String>>()
+                            .join(",")
+                    )
+                    .unwrap();
+                }
+            }
+            OutputFormat::JSON => {
+                for fields in iter {
+                    let iter = self.fields.as_ref().iter().map(|f| {
+                        (
+                            f.to_string(),
+                            fields
+                                .field(f)
+                                .map_or_else(|| serde_json::Value::Null, serde_json::Value::String),
+                        )
+                    });
+                    let fmap = serde_json::Map::from_iter(iter);
+                    let out = serde_json::to_string(&fmap).unwrap();
+                    writeln!(w, "{}", out).unwrap();
+                }
+            }
+            _ => unimplemented!(),
         }
     }
 
@@ -472,23 +544,26 @@ mod tests {
     fn end_to_end() {
         fn e2e(line: &'static str, args: &str) -> String {
             let config = cfg(args);
-            let mut iter = config.parser_iter(line.as_bytes());
-            let fields = iter.next().expect("at least one parsed line");
-            output(&fields, &config)
+            let iter = config.parser_iter(line.as_bytes());
+            let mut s = String::new();
+            config.output(iter, &mut s);
+            s
         }
         let l = "a,b,c";
-        assert_eq!(e2e(l, "-d, -f1"), "b");
-        assert_eq!(e2e(l, "-d, -f2"), "c");
+        assert_eq!(e2e(l, "-d, -f1"), "b\n");
+        assert_eq!(e2e(l, "-d, -f2"), "c\n");
         //assert_eq!(e2e(l, &["-d,", "-f1,2"]), "b c");
     }
 
     macro_rules! e2e_assert {
         ($line:expr, $args:expr, $expect:expr) => {
             let config = cfg($args);
-            let mut iter = config.parser_iter($line.as_bytes());
-            let fields = iter.next().expect("at least one parsed line");
-            let out = output(&fields, &config);
-            assert_eq!(out, $expect, "\nconfig: {:#?}", config);
+            let iter = config.parser_iter($line.as_bytes());
+            let mut out = String::new();
+            config.output(iter, &mut out);
+            let mut want = String::from($expect);
+            want.push('\n');
+            assert_eq!(out, want, "\nconfig: {:#?}", config);
         };
     }
 
