@@ -1,6 +1,6 @@
-use aline::{output, Config};
+use aline::Config;
 use std::fs::File;
-use std::io::stdin;
+use std::io::{stdin, stdout};
 use structopt::StructOpt;
 
 fn main() {
@@ -10,9 +10,7 @@ fn main() {
     }
 
     if config.inputs.is_empty() {
-        for r in config.parser_iter(stdin()) {
-            println!("{}", output(r, &config));
-        }
+        config.parse_and_output(stdin(), stdout());
     }
 
     for fname in &config.inputs {
@@ -20,8 +18,6 @@ fn main() {
             println!("# {}", fname.to_str().unwrap());
         }
         let f = File::open(fname).unwrap();
-        for r in config.parser_iter(f) {
-            println!("{}", output(r, &config));
-        }
+        config.parse_and_output(f, stdout());
     }
 }

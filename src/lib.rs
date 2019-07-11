@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
 use std::fmt;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -85,7 +85,7 @@ impl AsRef<[FieldSelector]> for FieldSelectors {
 }
 
 impl Config {
-    pub fn parse_and_output(&self, reader: impl Read, writer: impl fmt::Write) {
+    pub fn parse_and_output(&self, reader: impl Read, writer: impl Write) {
         match &self.input_format {
             Some(InputFormat::CSV) => self.output(self.csv_parser(reader), writer),
             Some(InputFormat::JSON) => self.output(self.json_parser_iter(reader), writer),
@@ -106,7 +106,7 @@ impl Config {
         }
     }
 
-    fn output(&self, iter: impl Iterator<Item = Box<dyn Fields>>, writer: impl fmt::Write) {
+    fn output(&self, iter: impl Iterator<Item = Box<dyn Fields>>, writer: impl Write) {
         let mut w = writer;
         let output = self.output.clone().unwrap_or(OutputFormat::Space);
         match output {
@@ -545,9 +545,9 @@ mod tests {
         fn e2e(line: &'static str, args: &str) -> String {
             let config = cfg(args);
             let iter = config.parser_iter(line.as_bytes());
-            let mut s = String::new();
+            let mut s = Vec::new();
             config.output(iter, &mut s);
-            s
+            String::from_utf8(s).unwrap()
         }
         let l = "a,b,c";
         assert_eq!(e2e(l, "-d, -f1"), "b\n");
@@ -559,13 +559,14 @@ mod tests {
         ($line:expr, $args:expr, $expect:expr) => {
             let config = cfg($args);
             let iter = config.parser_iter($line.as_bytes());
-            let mut out = String::new();
-            config.output(iter, &mut out);
+            let mut buf = Vec::new();
+            config.output(iter, &mut buf);
+            let got = String::from_utf8(buf).unwrap();
             let mut want = String::from($expect);
             if !want.ends_with('\n') {
                 want.push('\n');
             }
-            assert_eq!(out, want, "\nconfig: {:#?}", config);
+            assert_eq!(got, want, "\nconfig: {:#?}", config);
         };
     }
 
