@@ -360,6 +360,28 @@ impl FromStr for InputFormat {
     }
 }
 
+// Output format to use when printing.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum OutputFormat {
+    Space,
+    CSV,
+    JSON,
+    Custom(String),
+}
+
+impl FromStr for OutputFormat {
+    type Err = clap::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_ref() {
+            " " => Ok(OutputFormat::Space),
+            "json" => Ok(OutputFormat::JSON),
+            "csv" => Ok(OutputFormat::CSV),
+            _ => Ok(OutputFormat::Custom(s.to_string())),
+        }
+    }
+}
+
 /// Selects a field to output
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum FieldSelector {
@@ -431,28 +453,6 @@ pub struct ParsedLine {
     keys: HashMap<String, String>,
 }
 
-// Output format to use when printing.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum OutputFormat {
-    Space,
-    CSV,
-    JSON,
-    Custom(String),
-}
-
-impl FromStr for OutputFormat {
-    type Err = clap::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_ascii_lowercase().as_ref() {
-            " " => Ok(OutputFormat::Space),
-            "json" => Ok(OutputFormat::JSON),
-            "csv" => Ok(OutputFormat::CSV),
-            _ => Ok(OutputFormat::Custom(s.to_string())),
-        }
-    }
-}
-
 impl Fields for ParsedLine {
     fn field(&self, f: &FieldSelector) -> Option<String> {
         match f {
@@ -468,57 +468,9 @@ impl Fields for ParsedLine {
     }
 }
 
-pub fn output(fields: impl AsRef<dyn Fields>, config: &Config) -> String {
-    let fields = fields.as_ref();
-    let fmt = config.output.clone().unwrap_or(OutputFormat::Space);
-    match fmt {
-        OutputFormat::Space => config
-            .fields
-            .as_ref()
-            .iter()
-            .map(|f| fields.field(f))
-            .flatten()
-            .collect::<Vec<String>>()
-            .join(" "),
-        // TODO: fix CSV output to use CSV library and support header
-        OutputFormat::CSV => config
-            .fields
-            .as_ref()
-            .iter()
-            .map(|f| fields.field(f))
-            .flatten()
-            .map(|f| {
-                if f.contains(',') {
-                    format!("\"{}\"", f)
-                } else {
-                    f
-                }
-            })
-            .collect::<Vec<String>>()
-            .join(","),
-        OutputFormat::JSON => {
-            let iter = config.fields.as_ref().iter().map(|f| {
-                (
-                    f.to_string(),
-                    fields
-                        .field(f)
-                        .map_or_else(|| serde_json::Value::Null, serde_json::Value::String),
-                )
-            });
-            let fmap = serde_json::Map::from_iter(iter);
-            serde_json::to_string(&fmap).unwrap()
-        }
-        _ => unimplemented!(),
-    }
-}
-
-//fn run(config: &Config, lines: impl Iterator<Item = String>) -> impl Iterator<Item = String> {
-//    unimplemented!()
-//}
-
 #[cfg(test)]
 mod tests {
-    use crate::{output, Config};
+    use crate::Config;
     use shlex;
     use structopt::StructOpt;
 
@@ -552,7 +504,6 @@ mod tests {
         let l = "a,b,c";
         assert_eq!(e2e(l, "-d, -f1"), "b\n");
         assert_eq!(e2e(l, "-d, -f2"), "c\n");
-        //assert_eq!(e2e(l, &["-d,", "-f1,2"]), "b c");
     }
 
     macro_rules! e2e_assert {
