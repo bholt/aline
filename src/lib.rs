@@ -91,18 +91,6 @@ impl Config {
         }
     }
 
-    pub fn parser_iter<R: Read + 'static>(
-        &self,
-        reader: R,
-    ) -> Box<dyn Iterator<Item = Box<dyn Fields + 'static>>> {
-        match &self.input_format {
-            Some(InputFormat::CSV) => Box::new(self.csv_parser(reader)),
-            Some(InputFormat::JSON) => Box::new(self.json_parser_iter(reader)),
-            Some(InputFormat::Custom(s)) => Box::new(custom_parser_iter(s, reader)),
-            None => Box::new(self.delim_parser_iter(reader)),
-        }
-    }
-
     fn output(&self, iter: impl Iterator<Item = Box<dyn Fields>>, writer: impl Write) {
         let mut w = writer;
         let output = self.output.clone().unwrap_or(OutputFormat::Space);
@@ -164,10 +152,7 @@ impl Config {
         }
     }
 
-    fn json_parser_iter<R: Read>(
-        &self,
-        reader: R,
-    ) -> impl Iterator<Item = Box<dyn Fields + 'static>> {
+    fn json_parser_iter<R: Read>(&self, reader: R) -> impl Iterator<Item = Box<dyn Fields>> {
         BufReader::new(reader).lines().flat_map(move |r| match r {
             Ok(line) => {
                 let v: serde_json::Value = serde_json::from_str(line.as_str()).unwrap();
@@ -181,10 +166,7 @@ impl Config {
         })
     }
 
-    fn delim_parser_iter<R: Read>(
-        &self,
-        reader: R,
-    ) -> impl Iterator<Item = Box<dyn Fields + 'static>> {
+    fn delim_parser_iter<R: Read>(&self, reader: R) -> impl Iterator<Item = Box<dyn Fields>> {
         let delim = if let Some(d) = &self.delimiter {
             Regex::new(d).unwrap()
         } else {
@@ -212,7 +194,7 @@ impl Config {
         })
     }
 
-    fn csv_parser<R: Read>(&self, reader: R) -> impl Iterator<Item = Box<dyn Fields + 'static>> {
+    fn csv_parser<R: Read>(&self, reader: R) -> impl Iterator<Item = Box<dyn Fields>> {
         let has_header = self.fields.has_named_fields();
 
         let mut rb = csv::ReaderBuilder::new();
@@ -243,10 +225,7 @@ impl Config {
     }
 }
 
-fn custom_parser_iter<R: Read>(
-    input: &str,
-    reader: R,
-) -> impl Iterator<Item = Box<dyn Fields + 'static>> {
+fn custom_parser_iter<R: Read>(input: &str, reader: R) -> impl Iterator<Item = Box<dyn Fields>> {
     let pattern = Regex::new(input).unwrap();
     BufReader::new(reader).lines().flat_map(move |r| match r {
         // TODO: try to replace with some native regex match struct rather than converting to vec/map
