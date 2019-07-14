@@ -495,9 +495,8 @@ mod tests {
     fn end_to_end() {
         fn e2e(line: &'static str, args: &str) -> String {
             let config = cfg(args);
-            let iter = config.parser_iter(line.as_bytes());
             let mut s = Vec::new();
-            config.output(iter, &mut s);
+            config.parse_and_output(line.as_bytes(), &mut s);
             String::from_utf8(s).unwrap()
         }
         let l = "a,b,c";
@@ -508,9 +507,8 @@ mod tests {
     macro_rules! e2e_assert {
         ($line:expr, $args:expr, $expect:expr) => {
             let config = cfg($args);
-            let iter = config.parser_iter($line.as_bytes());
             let mut buf = Vec::new();
-            config.output(iter, &mut buf);
+            config.parse_and_output($line.as_bytes(), &mut buf);
             let got = String::from_utf8(buf).unwrap();
             let mut want = String::from($expect);
             if !want.ends_with('\n') {
