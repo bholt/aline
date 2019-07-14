@@ -466,7 +466,7 @@ impl Fields for ParsedLine {
 
 #[cfg(test)]
 mod tests {
-    use crate::Config;
+    use crate::{Config, FieldSelector, FieldSelectors};
     use shlex;
     use structopt::StructOpt;
 
@@ -482,9 +482,12 @@ mod tests {
         assert_eq!(
             Config {
                 delimiter: Some(",".to_string()),
+                fields: FieldSelectors {
+                    r: vec![FieldSelector::Index(0)]
+                },
                 ..Config::default()
             },
-            cfg("-d,"),
+            cfg("-d, -f0"),
         )
     }
 
