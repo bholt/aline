@@ -6,6 +6,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::str::FromStr;
+use strfmt::Format;
 use structopt::{clap, StructOpt};
 
 #[derive(Debug, StructOpt, Default, Eq, PartialEq)]
@@ -148,7 +149,17 @@ impl Config {
                     writeln!(w, "{}", out).unwrap();
                 }
             }
-            _ => unimplemented!(),
+            OutputFormat::Custom(pattern) => {
+                for fields in iter {
+                    let iter = self
+                        .fields
+                        .as_ref()
+                        .iter()
+                        .map(|f| (f.to_string(), fields.field(f).unwrap_or_default()));
+                    let vars = HashMap::from_iter(iter);
+                    writeln!(w, "{}", pattern.format(&vars).unwrap()).unwrap();
+                }
+            }
         }
     }
 
@@ -532,10 +543,17 @@ mod tests {
     }
 
     #[test]
-    fn custom() {
+    fn custom_input() {
         let text = "[2019-04-10 03:01:20.001] Found x in y";
         e2e_assert!(text, r#"-i 'Found (?P<a>\w+) in (?P<b>\w+)' -f a,b"#, "x y");
         e2e_assert!(text, r#"-i 'Found (.*) in (.*)' -f 0"#, "Found x in y");
         e2e_assert!(text, r#"-i 'Found (.*) in (.*)' -f 1,2"#, "x y");
+    }
+
+    #[test]
+    fn custom_output() {
+        let text = "a,b,c";
+        // TODO: don't require specifing `-f`, get the fields from the output format string
+        e2e_assert!(text, r#"-i csv -f 0,2 -o '_{0}_{2}_'"#, "_a_c_");
     }
 }
