@@ -2,7 +2,6 @@ use regex::{Captures, Regex};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
-use std::fmt;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::iter::FromIterator;
 use std::path::PathBuf;
@@ -125,26 +124,25 @@ impl Config {
                 }
             }
             OutputFormat::CSV => {
+                let has_header = self.fields.has_named_fields();
+                let mut csv_writer = csv::WriterBuilder::new()
+                    .has_headers(has_header)
+                    .from_writer(w);
+
+                if has_header {
+                    // write header
+                    csv_writer
+                        .write_record(self.fields.as_ref().iter().map(|f| f.to_string()))
+                        .unwrap();
+                }
+
                 for fields in iter {
-                    writeln!(
-                        w,
-                        "{}",
-                        self.fields
-                            .as_ref()
-                            .iter()
-                            .map(|f| fields.field(f))
-                            .flatten()
-                            .map(|f| {
-                                if f.contains(',') {
-                                    format!("\"{}\"", f)
-                                } else {
-                                    f
-                                }
-                            })
-                            .collect::<Vec<String>>()
-                            .join(",")
-                    )
-                    .unwrap();
+                    let v = self
+                        .fields
+                        .as_ref()
+                        .iter()
+                        .map(|f| fields.field(f).unwrap_or_default());
+                    csv_writer.write_record(v).unwrap();
                 }
             }
             OutputFormat::JSON => {
@@ -534,8 +532,8 @@ mod tests {
     #[test]
     fn csv_with_header() {
         let line_with_header = "a,b,c\n0,1,2";
-        e2e_assert!(line_with_header, "-i csv -o csv -f a", "0");
-        e2e_assert!(line_with_header, "-i csv -o csv -f c,b", "2,1");
+        e2e_assert!(line_with_header, "-i csv -o csv -f a", "a\n0");
+        e2e_assert!(line_with_header, "-i csv -o csv -f c,b", "c,b\n2,1");
         e2e_assert!(
             line_with_header,
             "-i csv -o json -f c,b",
@@ -548,7 +546,7 @@ mod tests {
         let json_map = r#"{"a":0, "b": "bb", "c": 2}"#;
         e2e_assert!(json_map, "-i json -f a", "0");
         e2e_assert!(json_map, "-i json -f a,b", "0 bb");
-        e2e_assert!(json_map, "-i json -o csv -f a,b", "0,bb");
+        e2e_assert!(json_map, "-i json -o csv -f a,b", "a,b\n0,bb");
         let json_list = r#"[0, "bb", 2]"#;
         e2e_assert!(json_list, "-i json -o csv -f 0,1", "0,bb");
     }
