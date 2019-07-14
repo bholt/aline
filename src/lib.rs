@@ -226,7 +226,7 @@ impl Config {
 }
 
 fn custom_parser_iter<R: Read>(input: &str, reader: R) -> impl Iterator<Item = Box<dyn Fields>> {
-    let pattern = Regex::new(input).unwrap();
+    let pattern = Regex::new(input).expect("unable to parse regex");
     BufReader::new(reader).lines().flat_map(move |r| match r {
         // TODO: try to replace with some native regex match struct rather than converting to vec/map
         Ok(line) => match pattern.captures(line.as_str()) {
@@ -529,5 +529,13 @@ mod tests {
         e2e_assert!(json_map, "-i json -o csv -f a,b", "a,b\n0,bb");
         let json_list = r#"[0, "bb", 2]"#;
         e2e_assert!(json_list, "-i json -o csv -f 0,1", "0,bb");
+    }
+
+    #[test]
+    fn custom() {
+        let text = "[2019-04-10 03:01:20.001] Found x in y";
+        e2e_assert!(text, r#"-i 'Found (?P<a>\w+) in (?P<b>\w+)' -f a,b"#, "x y");
+        e2e_assert!(text, r#"-i 'Found (.*) in (.*)' -f 0"#, "Found x in y");
+        e2e_assert!(text, r#"-i 'Found (.*) in (.*)' -f 1,2"#, "x y");
     }
 }
