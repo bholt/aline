@@ -9,8 +9,6 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use structopt::{clap, StructOpt};
 
-mod re;
-
 #[derive(Debug, StructOpt, Default, Eq, PartialEq)]
 #[structopt(
     name = "aline",
