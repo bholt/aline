@@ -32,7 +32,7 @@ pub struct Config {
 
     #[structopt(short = "f", long = "field")]
     /// Field(s) to print, specified by number or name (depending on the input format).
-    pub fields: FieldSelectors,
+    pub fields: Option<FieldSelectors>,
 
     #[structopt(short = "o", long = "output")]
     // Output format
@@ -46,7 +46,7 @@ pub struct Config {
     pub print_filename: bool,
 }
 
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Default, Eq, PartialEq, Clone)]
 pub struct FieldSelectors {
     r: Vec<FieldSelector>,
 }
@@ -95,16 +95,17 @@ impl Config {
     fn output(&self, iter: impl Iterator<Item = Box<dyn Fields>>, writer: impl Write) {
         let mut w = writer;
         let output = self.output.clone().unwrap_or(OutputFormat::Space);
+        let fields = self.fields.clone().unwrap_or_default();
         match output {
             OutputFormat::Space => {
-                for fields in iter {
+                for line in iter {
                     writeln!(
                         w,
                         "{}",
-                        self.fields
+                        fields
                             .as_ref()
                             .iter()
-                            .map(|f| fields.field(f))
+                            .map(|f| line.field(f))
                             .flatten()
                             .collect::<Vec<String>>()
                             .join(" ")
@@ -113,7 +114,7 @@ impl Config {
                 }
             }
             OutputFormat::CSV => {
-                let has_header = self.fields.has_named_fields();
+                let has_header = fields.has_named_fields();
                 let mut csv_writer = csv::WriterBuilder::new()
                     .has_headers(has_header)
                     .from_writer(w);
@@ -121,26 +122,24 @@ impl Config {
                 if has_header {
                     // write header
                     csv_writer
-                        .write_record(self.fields.as_ref().iter().map(|f| f.to_string()))
+                        .write_record(fields.as_ref().iter().map(|f| f.to_string()))
                         .unwrap();
                 }
 
-                for fields in iter {
-                    let v = self
-                        .fields
+                for line in iter {
+                    let v = fields
                         .as_ref()
                         .iter()
-                        .map(|f| fields.field(f).unwrap_or_default());
+                        .map(|f| line.field(f).unwrap_or_default());
                     csv_writer.write_record(v).unwrap();
                 }
             }
             OutputFormat::JSON => {
-                for fields in iter {
-                    let iter = self.fields.as_ref().iter().map(|f| {
+                for line in iter {
+                    let iter = fields.as_ref().iter().map(|f| {
                         (
                             f.to_string(),
-                            fields
-                                .field(f)
+                            line.field(f)
                                 .map_or_else(|| serde_json::Value::Null, serde_json::Value::String),
                         )
                     });
@@ -157,7 +156,7 @@ impl Config {
                         fmt.str(v.to_string().as_str())
                     };
                     let out = strfmt_map(pattern.as_ref(), &formatter).expect("unable to format");
-                    writeln!(w, "{}", out);
+                    writeln!(w, "{}", out).unwrap();
                 }
             }
         }
@@ -206,7 +205,8 @@ impl Config {
     }
 
     fn csv_parser<R: Read>(&self, reader: R) -> impl Iterator<Item = Box<dyn Fields>> {
-        let has_header = self.fields.has_named_fields();
+        let fields = self.fields.clone().unwrap_or_default();
+        let has_header = fields.has_named_fields();
 
         let mut rb = csv::ReaderBuilder::new();
         rb.flexible(true);
@@ -472,9 +472,9 @@ mod tests {
         assert_eq!(
             Config {
                 delimiter: Some(",".to_string()),
-                fields: FieldSelectors {
+                fields: Some(FieldSelectors {
                     r: vec![FieldSelector::Index(0)]
-                },
+                }),
                 ..Config::default()
             },
             cfg("-d, -f0"),
@@ -553,7 +553,6 @@ mod tests {
     #[test]
     fn custom_output() {
         let text = "a,b,c";
-        // TODO: don't require specifing `-f`, get the fields from the output format string
-        e2e_assert!(text, r#"-i csv -f 0,2 -o '_{0}_{2}_'"#, "_a_c_");
+        e2e_assert!(text, r#"-i csv -o '_{0}_{2}_'"#, "_a_c_");
     }
 }
