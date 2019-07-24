@@ -6,7 +6,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::str::FromStr;
-use strfmt::Format;
+use strfmt::{strfmt_map, Formatter};
 use structopt::{clap, StructOpt};
 
 #[derive(Debug, StructOpt, Default, Eq, PartialEq)]
@@ -151,13 +151,13 @@ impl Config {
             }
             OutputFormat::Custom(pattern) => {
                 for fields in iter {
-                    let iter = self
-                        .fields
-                        .as_ref()
-                        .iter()
-                        .map(|f| (f.to_string(), fields.field(f).unwrap_or_default()));
-                    let vars = HashMap::from_iter(iter);
-                    writeln!(w, "{}", pattern.format(&vars).unwrap()).unwrap();
+                    let formatter = |mut fmt: Formatter| {
+                        let sel = FieldSelector::from_str(fmt.key).expect("invalid key");
+                        let v = fields.field(&sel).unwrap_or_else(|| format!("<!{}>", sel));
+                        fmt.str(v.to_string().as_str())
+                    };
+                    let out = strfmt_map(pattern.as_ref(), &formatter).expect("unable to format");
+                    writeln!(w, "{}", out);
                 }
             }
         }
@@ -375,15 +375,6 @@ pub enum FieldSelector {
     Key(String),
 }
 
-impl ToString for FieldSelector {
-    fn to_string(&self) -> String {
-        match self {
-            FieldSelector::Index(i) => format!("{}", i),
-            FieldSelector::Key(k) => k.to_owned(),
-        }
-    }
-}
-
 impl FromStr for FieldSelector {
     type Err = std::io::Error;
 
@@ -391,6 +382,15 @@ impl FromStr for FieldSelector {
         match s.parse::<usize>() {
             Ok(i) => Ok(FieldSelector::Index(i)),
             Err(_) => Ok(FieldSelector::Key(String::from(s))),
+        }
+    }
+}
+
+impl std::fmt::Display for FieldSelector {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        match self {
+            FieldSelector::Index(i) => write!(f, "{}", i),
+            FieldSelector::Key(k) => write!(f, "{}", &k),
         }
     }
 }
