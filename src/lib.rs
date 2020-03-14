@@ -44,6 +44,10 @@ pub struct Config {
     #[structopt(short = "p", long = "print-filenames")]
     /// Print each filename prefixed with '#' before its results
     pub print_filename: bool,
+
+    #[structopt(short = "h", long = "header")]
+    /// Print header
+    pub header: bool,
 }
 
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
@@ -114,12 +118,9 @@ impl Config {
                 }
             }
             OutputFormat::CSV => {
-                let has_header = fields.has_named_fields();
-                let mut csv_writer = csv::WriterBuilder::new()
-                    .has_headers(has_header)
-                    .from_writer(w);
+                let mut csv_writer = csv::WriterBuilder::new().from_writer(w);
 
-                if has_header {
+                if self.header {
                     // write header
                     csv_writer
                         .write_record(fields.as_ref().iter().map(|f| f.to_string()))
@@ -150,6 +151,7 @@ impl Config {
             }
             OutputFormat::Custom(pattern) => {
                 for fields in iter {
+                    dbg!(&fields);
                     let formatter = |mut fmt: Formatter| {
                         let sel = FieldSelector::from_str(fmt.key).expect("invalid key");
                         let v = fields.field(&sel).unwrap_or_else(|| format!("<!{}>", sel));
@@ -214,11 +216,7 @@ impl Config {
 
         let mut r = rb.from_reader(reader);
 
-        let h = Box::new(csv_header_map(if has_header {
-            r.headers().ok()
-        } else {
-            None
-        }));
+        let h = Box::new(csv_header_map(r.headers().ok()));
 
         r.into_records().flat_map(move |r| match r {
             Ok(v) => {
@@ -552,7 +550,8 @@ mod tests {
 
     #[test]
     fn custom_output() {
-        let text = "a,b,c";
-        e2e_assert!(text, r#"-i csv -o '_{0}_{2}_'"#, "_a_c_");
+        let text = "a,b,c\n0,1,2";
+        e2e_assert!(text, r#"-i csv -o '_{0}_{2}_'"#, "_0_2_");
+        e2e_assert!(text, r#"-i csv -o '_{a}_{c}_'"#, "_0_2_");
     }
 }
