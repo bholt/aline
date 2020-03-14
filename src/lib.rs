@@ -89,7 +89,8 @@ impl AsRef<[FieldSelector]> for FieldSelectors {
 impl Config {
     pub fn parse_and_output(&self, reader: impl Read, writer: impl Write) {
         match &self.input_format {
-            Some(InputFormat::CSV) => self.output(self.csv_parser(reader), writer),
+            Some(InputFormat::CSV) => self.output(self.csv_parser(reader, true), writer),
+            Some(InputFormat::Comma) => self.output(self.csv_parser(reader, false), writer),
             Some(InputFormat::JSON) => self.output(self.json_parser_iter(reader), writer),
             Some(InputFormat::Custom(s)) => self.output(custom_parser_iter(s, reader), writer),
             None => self.output(self.delim_parser_iter(reader), writer),
@@ -206,10 +207,11 @@ impl Config {
         })
     }
 
-    fn csv_parser<R: Read>(&self, reader: R) -> impl Iterator<Item = Box<dyn Fields>> {
-        let fields = self.fields.clone().unwrap_or_default();
-        let has_header = fields.has_named_fields();
-
+    fn csv_parser<R: Read>(
+        &self,
+        reader: R,
+        has_header: bool,
+    ) -> impl Iterator<Item = Box<dyn Fields>> {
         let mut rb = csv::ReaderBuilder::new();
         rb.flexible(true);
         rb.has_headers(has_header);
@@ -329,6 +331,7 @@ impl Fields for CSVRecord {
 pub enum InputFormat {
     JSON,
     CSV,
+    Comma,
     Custom(String),
 }
 
@@ -339,6 +342,7 @@ impl FromStr for InputFormat {
         match s.to_ascii_lowercase().as_ref() {
             "json" => Ok(InputFormat::JSON),
             "csv" => Ok(InputFormat::CSV),
+            "comma" => Ok(InputFormat::Comma),
             _ => Ok(InputFormat::Custom(s.to_string())),
         }
     }
@@ -552,6 +556,7 @@ mod tests {
     fn custom_output() {
         let text = "a,b,c\n0,1,2";
         e2e_assert!(text, r#"-i csv -o '_{0}_{2}_'"#, "_0_2_");
+
         e2e_assert!(text, r#"-i csv -o '_{a}_{c}_'"#, "_0_2_");
     }
 }
