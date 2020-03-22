@@ -49,10 +49,6 @@ pub struct Config {
     /// Print each filename prefixed with '#' before its results
     pub print_filename: bool,
 
-    #[structopt(short = "h", long = "header")]
-    /// Print header
-    pub header: bool,
-
     #[structopt(short = "c", long = "count")]
     /// Print just the count of unique instances of each line (equivalent to `| sort | uniq -c`).
     pub count: bool,
@@ -122,11 +118,12 @@ impl Config {
                     counter.print(w);
                 }
             }
-            OutputFormat::CSV => {
+            OutputFormat::CSV | OutputFormat::Comma => {
                 let mut counter = Counter::new();
                 let mut csv_writer = csv::WriterBuilder::new().from_writer(w);
 
-                if self.header {
+                // print header if output is 'csv'
+                if output == OutputFormat::CSV {
                     let header = fields.as_ref().iter().map(|f| f.to_string());
 
                     // write header
@@ -392,6 +389,7 @@ impl FromStr for InputFormat {
 pub enum OutputFormat {
     Space,
     CSV,
+    Comma,
     JSON,
     Custom(String),
 }
@@ -404,6 +402,7 @@ impl FromStr for OutputFormat {
             " " => Ok(OutputFormat::Space),
             "json" => Ok(OutputFormat::JSON),
             "csv" => Ok(OutputFormat::CSV),
+            "comma" => Ok(OutputFormat::Comma),
             _ => Ok(OutputFormat::Custom(s.to_string())),
         }
     }
@@ -555,9 +554,9 @@ mod tests {
         e2e_assert!(l, "-d, -f1", "b");
         e2e_assert!(l, "-d, -f2", "c");
         e2e_assert!(l, "-d, -f1,2", "b c");
-        e2e_assert!(l, "-i csv -f1", "b");
-        e2e_assert!(l, "-i csv -f0,2", "a c");
-        e2e_assert!(l, "-i csv -o csv -f0,2", "a,c");
+        e2e_assert!(l, "-i comma -f1", "b");
+        e2e_assert!(l, "-i comma -f0,2", "a c");
+        e2e_assert!(l, "-i comma -o comma -f0,2", "a,c");
         e2e_assert!(l, "-d, -o json -f0,2", r#"{"0":"a","2":"c"}"#);
     }
 
@@ -580,7 +579,8 @@ mod tests {
         e2e_assert!(json_map, "-i json -f a,b", "0 bb");
         e2e_assert!(json_map, "-i json -o csv -f a,b", "a,b\n0,bb");
         let json_list = r#"[0, "bb", 2]"#;
-        e2e_assert!(json_list, "-i json -o csv -f 0,1", "0,bb");
+        e2e_assert!(json_list, "-i json -o comma -f 0,1", "0,bb");
+        e2e_assert!(json_list, "-i json -o csv -f 0,1", "0,1\n0,bb");
     }
 
     #[test]
@@ -617,6 +617,6 @@ mod tests {
     #[test]
     fn count_csv_output() {
         let text = "a,b\n0,foo\n1,bar\n2,foo";
-        e2e_assert!(text, "-i csv -f b -o csv -c -h", "count,b\n2,foo\n1,bar");
+        e2e_assert!(text, "-i csv -f b -o csv -c", "count,b\n2,foo\n1,bar");
     }
 }
