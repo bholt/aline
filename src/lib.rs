@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
+use std::iter;
 use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -123,6 +124,32 @@ impl Config {
             }
             OutputFormat::CSV => {
                 let mut csv_writer = csv::WriterBuilder::new().from_writer(w);
+
+                if count_unique {
+                    let mut counter = Counter::new();
+                    for line in iter {
+                        let v = fields
+                            .as_ref()
+                            .iter()
+                            .map(|f| line.field(f).unwrap_or_default());
+                        let vv = v.collect::<Vec<_>>();
+                        counter.insert(vv);
+                    }
+                    if self.header {
+                        // write header
+                        csv_writer
+                            .write_record(
+                                iter::once("count".to_string())
+                                    .chain(fields.as_ref().iter().map(|f| f.to_string())),
+                            )
+                            .unwrap();
+                    }
+                    for (mut entry, count) in counter.sorted_entries() {
+                        entry.insert(0, format!("{}", count));
+                        csv_writer.write_record(entry).unwrap();
+                    }
+                    return;
+                }
 
                 if self.header {
                     // write header
@@ -593,5 +620,11 @@ mod tests {
             r#"-f 0 -o json -c"#,
             "{\"count\":2,\"0\":\"a\"}\n{\"count\":1,\"0\":\"b\"}"
         );
+    }
+
+    #[test]
+    fn count_csv_output() {
+        let text = "a,b\n0,foo\n1,bar\n2,foo";
+        e2e_assert!(text, "-i csv -f b -o csv -c -h", "count,b\n2,foo\n1,bar");
     }
 }

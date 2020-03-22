@@ -4,11 +4,11 @@ use std::hash::Hash;
 use std::io::Write;
 use std::ops::AddAssign;
 
-pub struct Counter<T: Hash + Eq + Display> {
+pub struct Counter<T> {
     counts: HashMap<T, i64>,
 }
 
-impl<T: Hash + Eq + Display> Counter<T> {
+impl<T: Hash + Eq> Counter<T> {
     pub fn new() -> Counter<T> {
         Counter {
             counts: HashMap::new(),
@@ -25,7 +25,9 @@ impl<T: Hash + Eq + Display> Counter<T> {
         entries.sort_by_key(|(_, v)| -*v);
         entries.into_iter()
     }
+}
 
+impl<T: Hash + Eq + Display> Counter<T> {
     /// Pretty print the counter as `uniq -c | sort -nr` would.
     pub fn print(&self, writer: impl Write) {
         let mut w = writer;
