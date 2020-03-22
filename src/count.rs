@@ -1,22 +1,32 @@
 use std::collections::HashMap;
+use std::fmt::Display;
+use std::hash::Hash;
 use std::io::Write;
 use std::ops::AddAssign;
 
-pub struct Counter {
-    counts: HashMap<String, i64>,
+pub struct Counter<T: Hash + Eq + Display> {
+    counts: HashMap<T, i64>,
 }
 
-impl Counter {
-    pub fn new() -> Counter {
+impl<T: Hash + Eq + Display> Counter<T> {
+    pub fn new() -> Counter<T> {
         Counter {
             counts: HashMap::new(),
         }
     }
 
-    pub fn insert(&mut self, key: String) {
+    pub fn insert(&mut self, key: T) {
         self.counts.entry(key).or_default().add_assign(1);
     }
 
+    /// Consume counter and return an owned iterator to all the items, sorted by count
+    pub fn sorted_entries(self) -> impl Iterator<Item = (T, i64)> {
+        let mut entries = self.counts.into_iter().collect::<Vec<_>>();
+        entries.sort_by_key(|(_, v)| -*v);
+        entries.into_iter()
+    }
+
+    /// Pretty print the counter as `uniq -c | sort -nr` would.
     pub fn print(&self, writer: impl Write) {
         let mut w = writer;
         let mut entries = self.counts.iter().collect::<Vec<_>>();
