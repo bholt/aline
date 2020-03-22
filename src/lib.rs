@@ -140,6 +140,7 @@ impl Config {
                 }
             }
             OutputFormat::JSON => {
+                let mut counter = Counter::new();
                 for line in iter {
                     let iter = fields.as_ref().iter().map(|f| {
                         (
@@ -150,19 +151,35 @@ impl Config {
                     });
                     let fmap = serde_json::Map::from_iter(iter);
                     let out = serde_json::to_string(&fmap).unwrap();
-                    writeln!(w, "{}", out).unwrap();
+                    if count_unique {
+                        counter.insert(out);
+                    } else {
+                        writeln!(w, "{}", out).unwrap();
+                    }
+                }
+                if count_unique {
+                    for (line, count) in counter.sorted_entries() {
+                        writeln!(w, "{{\"count\":{},{}", count, &line[1..]).unwrap();
+                    }
                 }
             }
             OutputFormat::Custom(pattern) => {
+                let mut counter = Counter::new();
                 for fields in iter {
-                    dbg!(&fields);
                     let formatter = |mut fmt: Formatter| {
                         let sel = FieldSelector::from_str(fmt.key).expect("invalid key");
                         let v = fields.field(&sel).unwrap_or_else(|| format!("<!{}>", sel));
-                        fmt.str(v.to_string().as_str())
+                        fmt.str(v.as_str())
                     };
                     let out = strfmt_map(pattern.as_ref(), &formatter).expect("unable to format");
-                    writeln!(w, "{}", out).unwrap();
+                    if count_unique {
+                        counter.insert(out);
+                    } else {
+                        writeln!(w, "{}", out).unwrap();
+                    }
+                }
+                if count_unique {
+                    counter.print(w);
                 }
             }
         }
@@ -564,8 +581,17 @@ mod tests {
     }
 
     #[test]
-    fn count_space() {
+    fn count_output() {
         let text = "a\nb\na";
+        // space output
         e2e_assert!(text, r#"-f 0 -c"#, " 2  a\n 1  b");
+        // custom output
+        e2e_assert!(text, r#"-o '_{0}_' -c"#, " 2  _a_\n 1  _b_");
+        // json output
+        e2e_assert!(
+            text,
+            r#"-f 0 -o json -c"#,
+            "{\"count\":2,\"0\":\"a\"}\n{\"count\":1,\"0\":\"b\"}"
+        );
     }
 }
