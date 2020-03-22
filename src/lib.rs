@@ -123,39 +123,19 @@ impl Config {
                 }
             }
             OutputFormat::CSV => {
+                let mut counter = Counter::new();
                 let mut csv_writer = csv::WriterBuilder::new().from_writer(w);
 
-                if count_unique {
-                    let mut counter = Counter::new();
-                    for line in iter {
-                        let v = fields
-                            .as_ref()
-                            .iter()
-                            .map(|f| line.field(f).unwrap_or_default());
-                        let vv = v.collect::<Vec<_>>();
-                        counter.insert(vv);
-                    }
-                    if self.header {
-                        // write header
-                        csv_writer
-                            .write_record(
-                                iter::once("count".to_string())
-                                    .chain(fields.as_ref().iter().map(|f| f.to_string())),
-                            )
-                            .unwrap();
-                    }
-                    for (mut entry, count) in counter.sorted_entries() {
-                        entry.insert(0, format!("{}", count));
-                        csv_writer.write_record(entry).unwrap();
-                    }
-                    return;
-                }
-
                 if self.header {
+                    let header = fields.as_ref().iter().map(|f| f.to_string());
+
                     // write header
-                    csv_writer
-                        .write_record(fields.as_ref().iter().map(|f| f.to_string()))
-                        .unwrap();
+                    if count_unique {
+                        let header = iter::once("count".to_string()).chain(header);
+                        csv_writer.write_record(header).unwrap();
+                    } else {
+                        csv_writer.write_record(header).unwrap();
+                    }
                 }
 
                 for line in iter {
@@ -163,7 +143,19 @@ impl Config {
                         .as_ref()
                         .iter()
                         .map(|f| line.field(f).unwrap_or_default());
-                    csv_writer.write_record(v).unwrap();
+                    if count_unique {
+                        counter.insert(v.collect::<Vec<_>>());
+                    } else {
+                        csv_writer.write_record(v).unwrap();
+                    }
+                }
+
+                if count_unique {
+                    for (v, count) in counter.sorted_entries() {
+                        csv_writer
+                            .write_record(iter::once(count.to_string()).chain(v))
+                            .unwrap();
+                    }
                 }
             }
             OutputFormat::JSON => {
