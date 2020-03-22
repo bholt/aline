@@ -55,17 +55,6 @@ pub struct FieldSelectors {
     r: Vec<FieldSelector>,
 }
 
-impl FieldSelectors {
-    fn has_named_fields(&self) -> bool {
-        for f in &self.r {
-            if let FieldSelector::Key(_) = f {
-                return true;
-            }
-        }
-        false
-    }
-}
-
 // Implement FromStr for our custom type so we can parse comma-delimited fields like `-f 1,2`
 impl FromStr for FieldSelectors {
     type Err = clap::Error;
