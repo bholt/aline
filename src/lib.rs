@@ -1,3 +1,6 @@
+mod count;
+
+use count::Counter;
 use regex::{Captures, Regex};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -48,6 +51,10 @@ pub struct Config {
     #[structopt(short = "h", long = "header")]
     /// Print header
     pub header: bool,
+
+    #[structopt(short = "c", long = "count")]
+    /// Print just the count of unique instances of each line (equivalent to `| sort | uniq -c`).
+    pub count: bool,
 }
 
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
@@ -90,21 +97,28 @@ impl Config {
         let mut w = writer;
         let output = self.output.clone().unwrap_or(OutputFormat::Space);
         let fields = self.fields.clone().unwrap_or_default();
+        let count_unique = self.count;
         match output {
             OutputFormat::Space => {
+                let mut counter = Counter::new();
+
                 for line in iter {
-                    writeln!(
-                        w,
-                        "{}",
-                        fields
-                            .as_ref()
-                            .iter()
-                            .map(|f| line.field(f))
-                            .flatten()
-                            .collect::<Vec<String>>()
-                            .join(" ")
-                    )
-                    .unwrap();
+                    let s = fields
+                        .as_ref()
+                        .iter()
+                        .map(|f| line.field(f))
+                        .flatten()
+                        .collect::<Vec<String>>()
+                        .join(" ")
+                        .to_string();
+                    if count_unique {
+                        counter.insert(s.clone());
+                    } else {
+                        writeln!(w, "{}", s).unwrap();
+                    }
+                }
+                if count_unique {
+                    counter.print(w);
                 }
             }
             OutputFormat::CSV => {
@@ -547,5 +561,11 @@ mod tests {
         e2e_assert!(text, r#"-i csv -o '_{0}_{2}_'"#, "_0_2_");
 
         e2e_assert!(text, r#"-i csv -o '_{a}_{c}_'"#, "_0_2_");
+    }
+
+    #[test]
+    fn count_space() {
+        let text = "a\nb\na";
+        e2e_assert!(text, r#"-f 0 -c"#, " 2  a\n 1  b");
     }
 }
