@@ -14,13 +14,16 @@ use strfmt::{strfmt_map, Formatter};
 use structopt::{clap, StructOpt};
 
 #[derive(Debug, StructOpt, Default, Eq, PartialEq)]
-#[structopt(
-    name = "aline",
-    author = "Brandon Holt",
-    version = "0.1.0",
-    about = "Replacement for awk/cut/sed. Never again struggle to remember which one does what you want or splits fields how you want, just switch to aline for all your line-parsing needs"
-)]
-#[structopt(raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
+#[structopt(name = "aline", author = "Brandon Holt", version = "0.1.0")]
+#[structopt(setting = structopt::clap::AppSettings::ColoredHelp)]
+#[structopt(verbatim_doc_comment)]
+///
+/// Replacement for awk/cut/sed. Never again struggle to remember which one does what you want or splits fields how you want, just switch to aline for all your line-parsing needs.
+///
+/// Examples:
+///
+///     # Custom input format regex
+///     $ aline -i '(?P<key>\w+)\s+(?P<value>)' -f key,value
 pub struct Config {
     #[structopt(parse(from_os_str))]
     // Inputs passed as arguments
