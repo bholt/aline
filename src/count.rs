@@ -34,6 +34,10 @@ impl<T: Hash + Eq + Display> Counter<T> {
         let mut entries = self.counts.iter().collect::<Vec<_>>();
         entries.sort_by_key(|(_, v)| -**v);
 
+        if entries.is_empty() {
+            return;
+        }
+
         // figure out how many characters we need to pad with
         let width = format!("{}", entries[0].1).len() + 1;
 
