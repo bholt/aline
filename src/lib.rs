@@ -31,7 +31,7 @@ pub struct Config {
     pub delimiter: Option<String>,
 
     #[structopt(short = "i", long = "input")]
-    /// Input format (csv, json), cannot be set along with --delimiter.
+    /// Input format (csv, json, comma, custom), cannot be set along with --delimiter.
     pub input_format: Option<InputFormat>,
 
     #[structopt(short = "f", long = "field")]
