@@ -3,7 +3,6 @@ mod count;
 use count::Counter;
 use regex::{Captures, Regex};
 use serde::{Deserialize, Serialize};
-use serde_json;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::iter;
@@ -500,7 +499,6 @@ impl Fields for ParsedLine {
 #[cfg(test)]
 mod tests {
     use crate::{Config, FieldSelector, FieldSelectors};
-    use shlex;
     use structopt::StructOpt;
 
     /// Helper to create a Config from flags for testing
