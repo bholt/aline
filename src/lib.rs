@@ -54,6 +54,49 @@ pub struct Config {
     #[structopt(short = "c", long = "count")]
     /// Print just the count of unique instances of each line (equivalent to `| sort | uniq -c`).
     pub count: bool,
+
+    #[structopt(short = "e", long = "grep", parse(try_from_str = parse_key_val), number_of_values = 1)]
+    /// Filter/grep lines matching pattern, specify `-e field=pattern`
+    pub grep: Vec<(FieldSelector, RegexArg)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RegexArg(Regex);
+
+// Implement FromStr for our custom type so we can parse `-e key=pattern`
+impl FromStr for RegexArg {
+    type Err = clap::Error;
+
+    fn from_str(arg: &str) -> Result<Self, Self::Err> {
+        Regex::from_str(arg)
+            .map(|r| RegexArg(r))
+            .map_err(|e| clap::Error {
+                message: e.to_string(),
+                kind: clap::ErrorKind::ValueValidation,
+                info: None,
+            })
+    }
+}
+
+impl PartialEq for RegexArg {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.as_str() == other.0.as_str()
+    }
+}
+impl Eq for RegexArg {}
+
+/// Parse a single key-value pair
+fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<dyn std::error::Error>>
+where
+    T: std::str::FromStr,
+    T::Err: std::error::Error + 'static,
+    U: std::str::FromStr,
+    U::Err: std::error::Error + 'static,
+{
+    let pos = s
+        .find('=')
+        .ok_or_else(|| format!("invalid KEY=value: no `=` found in `{}`", s))?;
+    Ok((s[..pos].parse()?, s[pos + 1..].parse()?))
 }
 
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
@@ -84,12 +127,45 @@ impl AsRef<[FieldSelector]> for FieldSelectors {
 impl Config {
     pub fn parse_and_output(&self, reader: impl Read, writer: impl Write) {
         match &self.input_format {
-            Some(InputFormat::CSV) => self.output(self.csv_parser(reader, true), writer),
-            Some(InputFormat::Comma) => self.output(self.csv_parser(reader, false), writer),
-            Some(InputFormat::JSON) => self.output(self.json_parser_iter(reader), writer),
-            Some(InputFormat::Custom(s)) => self.output(custom_parser_iter(s, reader), writer),
-            None => self.output(self.delim_parser_iter(reader), writer),
+            Some(InputFormat::CSV) => self.output(self.grep(self.csv_parser(reader, true)), writer),
+            Some(InputFormat::Comma) => {
+                self.output(self.grep(self.csv_parser(reader, false)), writer)
+            }
+            Some(InputFormat::JSON) => {
+                self.output(self.grep(self.json_parser_iter(reader)), writer)
+            }
+            Some(InputFormat::Custom(s)) => {
+                self.output(self.grep(custom_parser_iter(s, reader)), writer)
+            }
+            None => self.output(self.grep(self.delim_parser_iter(reader)), writer),
         }
+    }
+
+    fn grep(
+        &self,
+        iter: impl Iterator<Item = Box<dyn Fields>>,
+    ) -> impl Iterator<Item = Box<dyn Fields>> {
+        let len = self.grep.len();
+        let grep = self.grep.clone();
+        iter.flat_map(move |line| {
+            if len == 0 {
+                return Some(line);
+            }
+            for (key, pattern) in &grep {
+                match &line.field(key) {
+                    // skip line if pattern doesn't match
+                    Some(val) => {
+                        if !pattern.0.is_match(val) {
+                            return None;
+                        }
+                    }
+                    // skip line if key not found
+                    None => return None,
+                }
+            }
+            // include line now that we know all patterns matched
+            return Some(line);
+        })
     }
 
     fn output(&self, iter: impl Iterator<Item = Box<dyn Fields>>, writer: impl Write) {
@@ -542,7 +618,7 @@ mod tests {
             config.parse_and_output($line.as_bytes(), &mut buf);
             let got = String::from_utf8(buf).unwrap();
             let mut want = String::from($expect);
-            if !want.ends_with('\n') {
+            if want.len() > 0 && !want.ends_with('\n') {
                 want.push('\n');
             }
             assert_eq!(got, want, "\nconfig: {:#?}", config);
@@ -619,5 +695,13 @@ mod tests {
     fn count_csv_output() {
         let text = "a,b\n0,foo\n1,bar\n2,foo";
         e2e_assert!(text, "-i csv -f b -o csv -c", "count,b\n2,foo\n1,bar");
+    }
+
+    #[test]
+    fn grep() {
+        let text = "a,b\n0,foo\n1,bar\n2,foo";
+        e2e_assert!(text, "-i csv -f a -e b=foo", "0\n2");
+        e2e_assert!(text, "-i csv -f a -e b=bar", "1");
+        e2e_assert!(text, "-i csv -f a -e b=baz", "");
     }
 }
