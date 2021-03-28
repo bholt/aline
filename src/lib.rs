@@ -704,4 +704,29 @@ mod tests {
         e2e_assert!(text, "-i csv -f a -e b=bar", "1");
         e2e_assert!(text, "-i csv -f a -e b=baz", "");
     }
+
+    #[test]
+    fn assets_csv() {
+        let text = include_str!("testdata/assets.csv");
+        e2e_assert!(
+            text,
+            "-i csv -f kanzi",
+            "000BE6\n720190\n720191\n720192\n720193"
+        );
+        e2e_assert!(
+            text,
+            "-i csv -e kanzi=720190 -f unique_chip_id_little_endian_hex",
+            "2e00e30eac641c00"
+        );
+        e2e_assert!(
+            text,
+            "-i csv -e kanzi=720190 -f serial_number",
+            "C039366011112305Z"
+        );
+        e2e_assert!(
+            text,
+            "-i csv -e kanzi=720190 -f mlb_serial_number",
+            "C0303430007E1258J"
+        );
+    }
 }
