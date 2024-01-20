@@ -1,5 +1,6 @@
 mod count;
 
+use comfy_table::{modifiers, presets, Table};
 use count::Counter;
 use regex::{Captures, Regex};
 use serde::{Deserialize, Serialize};
@@ -258,7 +259,38 @@ impl Config {
                 }
             }
             OutputFormat::Table => {
-                unimplemented!("")
+                let mut counter = Counter::new();
+                let mut table = Table::new();
+                table.load_preset(presets::UTF8_FULL);
+                table.apply_modifier(modifiers::UTF8_ROUND_CORNERS);
+                table.apply_modifier(modifiers::UTF8_SOLID_INNER_BORDERS);
+
+                let header = fields.as_ref().iter().map(|f| f.to_string());
+                if count_unique {
+                    table.set_header(iter::once("count".to_string()).chain(header));
+                } else {
+                    table.set_header(header);
+                }
+
+                for line in iter {
+                    let v = fields
+                        .as_ref()
+                        .iter()
+                        .map(|f| line.field(f).unwrap_or_default());
+                    if count_unique {
+                        counter.insert(v.collect::<Vec<_>>());
+                    } else {
+                        table.add_row(v);
+                    }
+                }
+
+                if count_unique {
+                    for (v, count) in counter.sorted_entries() {
+                        table.add_row(iter::once(count.to_string()).chain(v));
+                    }
+                }
+
+                writeln!(w, "{table}").unwrap();
             }
             OutputFormat::Custom(pattern) => {
                 let mut counter = Counter::new();

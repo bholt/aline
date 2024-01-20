@@ -1,4 +1,5 @@
 use aline::{Config, FieldSelector, FieldSelectors};
+use indoc::indoc;
 use structopt::StructOpt;
 
 /// Helper to create a Config from flags for testing
@@ -82,6 +83,34 @@ fn json() {
     let json_list = r#"[0, "bb", 2]"#;
     e2e_assert!(json_list, "-i json -o comma -f 0,1", "0,bb");
     e2e_assert!(json_list, "-i json -o csv -f 0,1", "0,1\n0,bb");
+}
+
+#[test]
+fn table_with_header() {
+    let text = "a,b,c\n0,1,2";
+    let want = indoc! {"
+        ╭───┬───╮
+        │ a │ b │
+        ╞═══╪═══╡
+        │ 0 │ 1 │
+        ╰───┴───╯
+    "};
+    e2e_assert!(text, "-i csv -fa,b -o table", want);
+}
+
+#[test]
+fn table_count_with_header() {
+    let text = "a,b\n0,foo\n1,bar\n2,foo";
+    let want = indoc! {"
+        ╭───────┬─────╮
+        │ count │ b   │
+        ╞═══════╪═════╡
+        │ 2     │ foo │
+        ├───────┼─────┤
+        │ 1     │ bar │
+        ╰───────┴─────╯
+    "};
+    e2e_assert!(text, "-i csv -fb -o table -c", want);
 }
 
 #[test]

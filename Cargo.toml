@@ -12,6 +12,7 @@ serde_json = "1.0"
 csv = "1"
 strfmt = "0"
 comfy-table = "7.1.0"
+indoc = "2"
 
 [dev-dependencies]
 shlex = "0.1"
