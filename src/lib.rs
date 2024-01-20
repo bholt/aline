@@ -430,6 +430,9 @@ impl RegexLine {
 }
 
 impl Fields for RegexLine {
+    fn all(&self) -> Vec<String> {
+        self.groups.clone().into_iter().flatten().collect()
+    }
     fn field(&self, f: &FieldSelector) -> Option<String> {
         match f {
             FieldSelector::Index(i) => {
@@ -461,6 +464,9 @@ struct CSVRecord {
 }
 
 impl Fields for CSVRecord {
+    fn all(&self) -> Vec<String> {
+        self.row.into_iter().map(|v| v.to_string()).collect()
+    }
     fn field(&self, f: &FieldSelector) -> Option<String> {
         match f {
             FieldSelector::Index(i) => self.row.get(*i).map(ToOwned::to_owned),
@@ -551,6 +557,7 @@ impl std::fmt::Display for FieldSelector {
 }
 
 pub trait Fields: std::fmt::Debug {
+    fn all(&self) -> Vec<String>;
     fn field(&self, f: &FieldSelector) -> Option<String>;
 }
 
@@ -560,6 +567,9 @@ pub struct DelimitedLine {
 }
 
 impl Fields for DelimitedLine {
+    fn all(&self) -> Vec<String> {
+        self.fields.clone()
+    }
     fn field(&self, f: &FieldSelector) -> Option<String> {
         match f {
             FieldSelector::Index(i) => {
@@ -575,6 +585,12 @@ impl Fields for DelimitedLine {
 }
 
 impl Fields for serde_json::Value {
+    fn all(&self) -> Vec<String> {
+        match self.as_object() {
+            Some(v) => v.values().map(|v| v.to_string()).collect(),
+            None => Vec::new()
+        }
+    }
     fn field(&self, f: &FieldSelector) -> Option<String> {
         let v = match f {
             FieldSelector::Index(i) => self.get(i),
@@ -595,6 +611,9 @@ pub struct ParsedLine {
 }
 
 impl Fields for ParsedLine {
+    fn all(&self) -> Vec<String> {
+        self.fields.clone()
+    }
     fn field(&self, f: &FieldSelector) -> Option<String> {
         match f {
             FieldSelector::Index(i) => {
