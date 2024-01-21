@@ -2,9 +2,9 @@ mod count;
 
 use comfy_table::{modifiers, presets, Table};
 use count::Counter;
+use indexmap::IndexMap;
 use regex::{Captures, Regex};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::iter;
 use std::iter::FromIterator;
@@ -102,7 +102,16 @@ where
 
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
 pub struct FieldSelectors {
-    pub r: Vec<FieldSelector>,
+    r: Vec<FieldSelector>,
+}
+
+impl FieldSelectors {
+    pub fn new(r: Vec<FieldSelector>) -> FieldSelectors {
+        FieldSelectors { r }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.r.is_empty()
+    }
 }
 
 // Implement FromStr for our custom type so we can parse comma-delimited fields like `-f 1,2`
@@ -179,14 +188,17 @@ impl Config {
                 let mut counter = Counter::new();
 
                 for line in iter {
-                    let s = fields
-                        .as_ref()
-                        .iter()
-                        .map(|f| line.field(f))
-                        .flatten()
-                        .collect::<Vec<String>>()
-                        .join(" ")
-                        .to_string();
+                    let vs = if fields.is_empty() {
+                        Vec::from_iter(line.all().values().cloned())
+                    } else {
+                        fields
+                            .as_ref()
+                            .iter()
+                            .map(|f| line.field(f))
+                            .flatten()
+                            .collect::<Vec<String>>()
+                    };
+                    let s = vs.join(" ").to_string();
                     if count_unique {
                         counter.insert(s.clone());
                     } else {
@@ -215,14 +227,19 @@ impl Config {
                 }
 
                 for line in iter {
-                    let v = fields
-                        .as_ref()
-                        .iter()
-                        .map(|f| line.field(f).unwrap_or_default());
-                    if count_unique {
-                        counter.insert(v.collect::<Vec<_>>());
+                    let vs = if fields.is_empty() {
+                        Vec::from_iter(line.all().values().cloned())
                     } else {
-                        csv_writer.write_record(v).unwrap();
+                        fields
+                        .as_ref()
+                        .into_iter()
+                        .map(|f| line.field(f).unwrap_or_default())
+                        .collect::<Vec<_>>()
+                    };
+                    if count_unique {
+                        counter.insert(vs);
+                    } else {
+                        csv_writer.write_record(vs).unwrap();
                     }
                 }
 
@@ -244,7 +261,15 @@ impl Config {
                                 .map_or_else(|| serde_json::Value::Null, serde_json::Value::String),
                         )
                     });
-                    let fmap = serde_json::Map::from_iter(iter);
+                    let fmap = if fields.is_empty() {
+                        serde_json::Map::from_iter(
+                            line.all().iter().map(|(k,v)| 
+                                (k.to_owned(), serde_json::Value::String(v.to_string()))
+                            )
+                        )
+                    } else {
+                        serde_json::Map::from_iter(iter)
+                    };
                     let out = serde_json::to_string(&fmap).unwrap();
                     if count_unique {
                         counter.insert(out);
@@ -265,22 +290,31 @@ impl Config {
                 table.apply_modifier(modifiers::UTF8_ROUND_CORNERS);
                 table.apply_modifier(modifiers::UTF8_SOLID_INNER_BORDERS);
 
-                let header = fields.as_ref().iter().map(|f| f.to_string());
-                if count_unique {
-                    table.set_header(iter::once("count".to_string()).chain(header));
-                } else {
-                    table.set_header(header);
-                }
-
-                for line in iter {
-                    let v = fields
+                for (i, line) in iter.enumerate() {
+                    if i == 0 {
+                        let header: Vec<String> = if fields.is_empty() {
+                            line.all().keys().into_iter().cloned().collect()
+                        } else {
+                            fields.as_ref().iter().map(|f| f.to_string()).collect()
+                        };
+                        if count_unique {
+                            table.set_header(iter::once("count".to_string()).chain(header));
+                        } else {
+                            table.set_header(header);
+                        }
+                    }
+                    let vs: Vec<_> = if fields.is_empty() {
+                        line.all().values().into_iter().cloned().collect()
+                    } else { 
+                        fields
                         .as_ref()
                         .iter()
-                        .map(|f| line.field(f).unwrap_or_default());
+                        .map(|f| line.field(f).unwrap_or_default()).collect()
+                    };
                     if count_unique {
-                        counter.insert(v.collect::<Vec<_>>());
+                        counter.insert(vs);
                     } else {
-                        table.add_row(v);
+                        table.add_row(vs);
                     }
                 }
 
@@ -407,7 +441,7 @@ fn custom_parser_iter<R: Read>(input: &str, reader: R) -> impl Iterator<Item = B
 #[derive(Debug)]
 struct RegexLine {
     groups: Vec<Option<String>>,
-    named_groups: HashMap<String, String>,
+    named_groups: IndexMap<String, String>,
 }
 
 impl RegexLine {
@@ -417,7 +451,7 @@ impl RegexLine {
                 .iter()
                 .map(|m| m.map(|m| m.as_str().to_string()))
                 .collect(),
-            named_groups: HashMap::new(),
+            named_groups: IndexMap::new(),
         };
         for name in pattern.capture_names().flatten() {
             if let Some(m) = captures.name(name) {
@@ -430,8 +464,8 @@ impl RegexLine {
 }
 
 impl Fields for RegexLine {
-    fn all(&self) -> Vec<String> {
-        self.groups.clone().into_iter().flatten().collect()
+    fn all(&self) -> IndexMap<String,String> {
+        self.named_groups.clone()
     }
     fn field(&self, f: &FieldSelector) -> Option<String> {
         match f {
@@ -447,8 +481,8 @@ impl Fields for RegexLine {
     }
 }
 
-fn csv_header_map(h: Option<&csv::StringRecord>) -> HashMap<String, usize> {
-    let mut m = HashMap::new();
+fn csv_header_map(h: Option<&csv::StringRecord>) -> IndexMap<String, usize> {
+    let mut m = IndexMap::new();
     if let Some(h) = h {
         for (i, f) in h.iter().enumerate() {
             m.insert(f.to_owned(), i);
@@ -460,12 +494,13 @@ fn csv_header_map(h: Option<&csv::StringRecord>) -> HashMap<String, usize> {
 #[derive(Debug)]
 struct CSVRecord {
     row: csv::StringRecord,
-    header: Box<HashMap<String, usize>>,
+    header: Box<IndexMap<String, usize>>,
 }
 
 impl Fields for CSVRecord {
-    fn all(&self) -> Vec<String> {
-        self.row.into_iter().map(|v| v.to_string()).collect()
+    fn all(&self) -> IndexMap<String,String> {
+        let vs = self.row.into_iter().map(|v| v.to_string());
+        self.header.keys().zip(vs).map(|(k,v)| (k.to_string(), v)).collect()
     }
     fn field(&self, f: &FieldSelector) -> Option<String> {
         match f {
@@ -557,7 +592,7 @@ impl std::fmt::Display for FieldSelector {
 }
 
 pub trait Fields: std::fmt::Debug {
-    fn all(&self) -> Vec<String>;
+    fn all(&self) -> IndexMap<String,String>;
     fn field(&self, f: &FieldSelector) -> Option<String>;
 }
 
@@ -567,8 +602,11 @@ pub struct DelimitedLine {
 }
 
 impl Fields for DelimitedLine {
-    fn all(&self) -> Vec<String> {
-        self.fields.clone()
+    fn all(&self) -> IndexMap<String,String> {
+        IndexMap::from_iter(self.fields.clone().into_iter()
+            .enumerate()
+            .map(|(i,v)| (i.to_string(), v))
+        )
     }
     fn field(&self, f: &FieldSelector) -> Option<String> {
         match f {
@@ -585,10 +623,10 @@ impl Fields for DelimitedLine {
 }
 
 impl Fields for serde_json::Value {
-    fn all(&self) -> Vec<String> {
+    fn all(&self) -> IndexMap<String,String> {
         match self.as_object() {
-            Some(v) => v.values().map(|v| v.to_string()).collect(),
-            None => Vec::new()
+            Some(v) => IndexMap::from_iter(v.into_iter().map(|(k,v)| (k.to_owned(), v.to_owned().to_string()))),
+            None => IndexMap::new(),
         }
     }
     fn field(&self, f: &FieldSelector) -> Option<String> {
@@ -607,12 +645,12 @@ impl Fields for serde_json::Value {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ParsedLine {
     fields: Vec<String>,
-    keys: HashMap<String, String>,
+    keys: IndexMap<String, String>,
 }
 
 impl Fields for ParsedLine {
-    fn all(&self) -> Vec<String> {
-        self.fields.clone()
+    fn all(&self) -> IndexMap<String,String> {
+        self.keys.clone()
     }
     fn field(&self, f: &FieldSelector) -> Option<String> {
         match f {

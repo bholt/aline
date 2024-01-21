@@ -14,9 +14,7 @@ fn test_cfg_helper() {
     assert_eq!(
         Config {
             delimiter: Some(",".to_string()),
-            fields: Some(FieldSelectors {
-                r: vec![FieldSelector::Index(0)]
-            }),
+            fields: Some(FieldSelectors::new(vec![FieldSelector::Index(0)])),
             ..Config::default()
         },
         cfg("-d, -f0"),
@@ -111,6 +109,7 @@ fn table_count_with_header() {
         ╰───────┴─────╯
     "};
     e2e_assert!(text, "-i csv -fb -o table -c", want);
+    e2e_assert!(text, "-i csv -o table -c", want);
 }
 
 #[test]

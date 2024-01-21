@@ -1,17 +1,17 @@
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::io::Write;
 use std::ops::AddAssign;
 
 pub struct Counter<T> {
-    counts: HashMap<T, i64>,
+    counts: IndexMap<T, i64>,
 }
 
 impl<T: Hash + Eq> Counter<T> {
     pub fn new() -> Counter<T> {
         Counter {
-            counts: HashMap::new(),
+            counts: IndexMap::new(),
         }
     }
 
