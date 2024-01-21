@@ -85,7 +85,10 @@ fn json() {
 
 #[test]
 fn table_with_header() {
-    let text = "a,b,c\n0,1,2";
+    let text = indoc! {"
+        a,b,c
+        0,1,2
+    "};
     let want = indoc! {"
         ╭───┬───╮
         │ a │ b │
@@ -94,6 +97,17 @@ fn table_with_header() {
         ╰───┴───╯
     "};
     e2e_assert!(text, "-i csv -fa,b -o table", want);
+    e2e_assert!(
+        text,
+        "-i csv -o table",
+        indoc! {"
+        ╭───┬───┬───╮
+        │ a │ b │ c │
+        ╞═══╪═══╪═══╡
+        │ 0 │ 1 │ 2 │
+        ╰───┴───┴───╯
+        "}
+    );
 }
 
 #[test]
@@ -109,7 +123,21 @@ fn table_count_with_header() {
         ╰───────┴─────╯
     "};
     e2e_assert!(text, "-i csv -fb -o table -c", want);
-    e2e_assert!(text, "-i csv -o table -c", want);
+    e2e_assert!(
+        text,
+        "-i csv -o table -c",
+        indoc! {"
+        ╭───────┬───┬─────╮
+        │ count │ a │ b   │
+        ╞═══════╪═══╪═════╡
+        │ 1     │ 0 │ foo │
+        ├───────┼───┼─────┤
+        │ 1     │ 1 │ bar │
+        ├───────┼───┼─────┤
+        │ 1     │ 2 │ foo │
+        ╰───────┴───┴─────╯
+    "}
+    );
 }
 
 #[test]
