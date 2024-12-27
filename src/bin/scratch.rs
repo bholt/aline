@@ -33,20 +33,9 @@ fn main() {
 
     let mut row = df.get_row(0).expect("unable to get first reference row");
     for i in 0..df.height() {
-        for c in 0..df.width() {
-            let value = df.get_column(c).unwrap().get(i).unwrap();
-            row.0[c] = value;
-        }
-        df.get_row_amortized(i, &mut row).expect("row {i} doesn't match the first row");
-        let row_values: Vec<String> = row.0.iter().map(|v| v.to_string()).collect();
+        df.get_row_amortized(i, &mut row).expect("unable to get row {i}");
+        let row_values: Vec<String> = row.0.iter().map(|s| s.to_string()).collect();
         table.add_row(row_values);
-    }
-
-    for chunk in df.iter_chunks(CompatLevel::newest(), false) {
-        for row in chunk.iter() {
-            let row_values: Vec<String> = row.map(|v| v.to_string()).collect();
-            table.add_row(row_values);
-        }
     }
 
     println!("{table}");
