@@ -13,8 +13,8 @@ csv = "1.1.6"
 strfmt = "0.2.4"
 comfy-table = "7.1.1"
 indoc = "2.0.0"
-indexmap = "1.7.0"
+indexmap = "2.7.0"
 polars = { version = "0.45.1", features = ["lazy"] }
 
 [dev-dependencies]
-shlex = "0.1"
+shlex = "1.3"
