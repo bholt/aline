@@ -5,15 +5,16 @@ authors = ["Brandon Holt <b.holt@apple.com>"]
 edition = "2018"
 
 [dependencies]
-structopt = "0.3"
-regex = "1"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-csv = "1"
-strfmt = "0"
-comfy-table = "7.1.0"
-indoc = "2"
-indexmap = "2"
+structopt = "0.3.25"
+regex = "1.5.4"
+serde = { version = "1.0.130", features = ["derive"] }
+serde_json = "1.0.68"
+csv = "1.1.6"
+strfmt = "0.2.4"
+comfy-table = "7.1.1"
+indoc = "2.0.0"
+indexmap = "1.7.0"
+polars = { version = "0.45.1", features = ["lazy"] }
 
 [dev-dependencies]
 shlex = "0.1"
