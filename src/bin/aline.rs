@@ -1,16 +1,26 @@
-use aline::Config;
+use aline::{Config, InputFormat};
 use std::fs::File;
 use std::io::{stdin, stdout};
 use structopt::StructOpt;
 
 fn main() {
-    let config: Config = Config::from_args();
+    let mut config: Config = Config::from_args();
     if config.verbose {
         println!("{:#?}", config);
     }
 
     if config.inputs.is_empty() {
         config.parse_and_output(stdin(), stdout());
+        return;
+    }
+
+    if config.input_format == None
+        && config
+            .inputs
+            .iter()
+            .all(|i| i.extension().map_or(false, |e| e == "csv"))
+    {
+        config.input_format = Some(InputFormat::CSV);
     }
 
     for fname in &config.inputs {
